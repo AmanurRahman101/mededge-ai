@@ -1,0 +1,29 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Real patient documents never enter git. Only app-redacted, hand-checked copies go in data/samples/.
+data/private/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+backend/var/
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Local tool output
+scripts/out/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
