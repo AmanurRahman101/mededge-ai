@@ -40,6 +40,10 @@ async def health(request: Request, probe_providers: bool = False) -> dict:
         "meta_key_present": bool(
             settings.model_api_key and settings.model_api_key.get_secret_value()
         ),
+        "budget": {
+            "spent_today_usd": request.app.state.db.spent_today(),
+            "daily_limit_usd": settings.daily_budget_usd,
+        },
         "roles": roles,
         "sam": {"provider": settings.sam_provider, "model": settings.sam_model},
         "voice": {"model": settings.voice_model},

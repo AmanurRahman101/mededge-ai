@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     enable_dev_routes: bool = False
     request_timeout_s: float = 180.0
+    database_url: str = "sqlite:///var/mededge.db"
+    runs_dir: str = "var/runs"
+    hapi_base_url: str = "https://hapi.fhir.org/baseR4"
+    rate_limit: str = "30/minute"
+    pseudonym_salt: str = "mededge"
+    sam_local_checkpoint: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

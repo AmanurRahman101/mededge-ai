@@ -71,6 +71,10 @@ class EventBus:
     def exists(self, run_id: str) -> bool:
         return run_id in self._channels
 
+    def accepting(self, run_id: str) -> bool:
+        channel = self._channels.get(run_id)
+        return channel is not None and not channel.closed
+
     def history(self, run_id: str) -> list[PipelineEvent]:
         return list(self._channels[run_id].history)
 

@@ -1,0 +1,138 @@
+{
+  "note": "Fictional sheets drawn for the demo. Not real patients.",
+  "cases": [
+    {
+      "id": "cbc",
+      "title": "Complete blood count",
+      "kind": "lab_report",
+      "summary": "Fictional sheet. The header has a name and a phone number.",
+      "file": "cbc.png",
+      "extraction": {
+        "document_type": "lab_report",
+        "rows": [
+          {
+            "raw_name": "Haemoglobin",
+            "value": 11.2,
+            "unit": "g/dL",
+            "ref_low": 13.0,
+            "ref_high": 17.0,
+            "contains_identifier": false
+          },
+          {
+            "raw_name": "S. Creatinine",
+            "value": 1.4,
+            "unit": "mg/dL",
+            "ref_low": 0.7,
+            "ref_high": 1.2,
+            "contains_identifier": false
+          },
+          {
+            "raw_name": "Platelets",
+            "value": 2.1,
+            "unit": "lakh/cumm",
+            "ref_low": 1.5,
+            "ref_high": 4.0,
+            "contains_identifier": false
+          },
+          {
+            "raw_name": "ESR",
+            "value": 28,
+            "unit": "mm/1st hr",
+            "ref_low": 0,
+            "ref_high": 10,
+            "contains_identifier": false
+          },
+          {
+            "raw_name": "WBC",
+            "value": 9800,
+            "unit": "/cumm",
+            "ref_low": 4000,
+            "ref_high": 11000,
+            "contains_identifier": false
+          }
+        ],
+        "medications": [],
+        "advised_tests": []
+      }
+    },
+    {
+      "id": "lipid",
+      "title": "Skewed lipid profile",
+      "kind": "lab_report",
+      "summary": "Fictional sheet, slightly rotated. Use Inject a fault to show a repair.",
+      "file": "lipid.png",
+      "extraction": {
+        "document_type": "lab_report",
+        "rows": [
+          {
+            "raw_name": "Cholesterol",
+            "value": 214,
+            "unit": "mg/dL",
+            "ref_high": 200,
+            "contains_identifier": false
+          },
+          {
+            "raw_name": "Triglyceride",
+            "value": 188,
+            "unit": "mg/dL",
+            "ref_high": 150,
+            "contains_identifier": false
+          },
+          {
+            "raw_name": "HDL",
+            "value": 39,
+            "unit": "mg/dL",
+            "ref_low": 40,
+            "contains_identifier": false
+          },
+          {
+            "raw_name": "LDL",
+            "value": 142,
+            "unit": "mg/dL",
+            "ref_high": 100,
+            "contains_identifier": false
+          }
+        ],
+        "medications": [],
+        "advised_tests": []
+      }
+    },
+    {
+      "id": "prescription",
+      "title": "Handwritten-style prescription",
+      "kind": "prescription",
+      "summary": "Fictional prescription. Doses are copied as written, including 1+0+1.",
+      "file": "prescription.png",
+      "extraction": {
+        "document_type": "prescription",
+        "rows": [],
+        "medications": [
+          {
+            "raw_text": "Tab. Napa 500 mg 1+0+1 after meal 5 days",
+            "drug_name": "Napa",
+            "dose_text": "1+0+1",
+            "timing_text": "after meal",
+            "duration_text": "5 days",
+            "contains_identifier": false
+          },
+          {
+            "raw_text": "Cap. Seclo 20 mg 1+0+0 before meal 14 days",
+            "drug_name": "Seclo",
+            "dose_text": "1+0+0",
+            "timing_text": "before meal",
+            "duration_text": "14 days",
+            "contains_identifier": false
+          }
+        ],
+        "advised_tests": [
+          {
+            "raw_name": "S. Creatinine"
+          },
+          {
+            "raw_name": "CBC"
+          }
+        ]
+      }
+    }
+  ]
+}

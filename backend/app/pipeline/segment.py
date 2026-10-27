@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -43,6 +44,22 @@ def parse_boxes(output_text: str) -> list[SamBox]:
             )
         )
     return boxes
+
+
+CONCEPTS = ("sheet of paper", "table", "barcode", "QR code", "signature", "stamp", "photo")
+
+
+async def segment_page(
+    http: httpx.AsyncClient, settings: Settings, image: ImagePart
+) -> dict[str, list[SamBox]]:
+    if settings.sam_provider == "local":
+        from app.pipeline.sam_local import segment_local
+
+        return await segment_local(image, CONCEPTS, settings.sam_local_checkpoint)
+    raw = await asyncio.gather(
+        *(segment_concept(http, settings, image, concept) for concept in CONCEPTS)
+    )
+    return {concept: parse_boxes(text) for concept, text in zip(CONCEPTS, raw, strict=True)}
 
 
 async def segment_concept(

@@ -1,0 +1,18 @@
+{
+  "motion": {
+    "state": "180ms cubic-bezier(0.16, 1, 0.3, 1)",
+    "hover": "200ms cubic-bezier(0.16, 1, 0.3, 1)"
+  },
+  "elevation": {
+    "sheet": "0 12px 28px rgb(0 0 0 / 0.35)"
+  },
+  "breakpoints": {
+    "stack": "800px",
+    "drawer": "1279px"
+  },
+  "rules": [
+    "Semantic color only: rose for hidden identifiers, green for verified, amber for review.",
+    "One primary action per step.",
+    "Reduced motion removes the hover shift."
+  ]
+}
