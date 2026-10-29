@@ -87,15 +87,23 @@ class Settings(BaseSettings):
     voice_model: str = "muse-voice-transcribe-1.0"
 
     daily_budget_usd: float = 8.0
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     enable_dev_routes: bool = False
     request_timeout_s: float = 180.0
     database_url: str = "sqlite:///var/mededge.db"
+    database_url_unpooled: str = ""
     runs_dir: str = "var/runs"
     hapi_base_url: str = "https://hapi.fhir.org/baseR4"
     rate_limit: str = "30/minute"
     pseudonym_salt: str = "mededge"
     sam_local_checkpoint: str = ""
+    app_env: Literal["development", "production", "test"] = "development"
+    trust_render_proxy: bool = False
+    app_base_url: str = "http://localhost:5173"
+    resend_api_key: SecretStr | None = None
+    resend_from_email: str = ""
+    auth_email_daily_limit: int = 90
+    auth_email_monthly_limit: int = 2500
 
     @property
     def cors_origin_list(self) -> list[str]:

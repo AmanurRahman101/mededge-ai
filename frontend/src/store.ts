@@ -1,10 +1,14 @@
 import { create } from "zustand";
 
 import type { Screen } from "./types";
+import type { User } from "./api";
+import { navigate } from "./navigation";
 
 interface AppState {
   screen: Screen;
   theme: "dark" | "light";
+  user: User | null;
+  setUser: (user: User | null) => void;
   setScreen: (screen: Screen) => void;
   toggleTheme: () => void;
 }
@@ -16,7 +20,9 @@ document.documentElement.classList.toggle("dark", theme === "dark");
 export const useApp = create<AppState>((set) => ({
   screen: "start",
   theme,
-  setScreen: (screen) => set({ screen }),
+  user: null,
+  setUser: (user) => set({ user }),
+  setScreen: (screen) => { set({ screen }); navigate(screen === "start" ? "/" : `/${screen}`); },
   toggleTheme: () =>
     set((state) => {
       const next = state.theme === "dark" ? "light" : "dark";

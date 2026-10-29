@@ -9,6 +9,9 @@ export function useRun(runId: string | null) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setRun(null);
+    setEvents([]);
+    setError(null);
     if (!runId) return;
     let stopped = false;
     const source = new EventSource(`${apiBase}/api/runs/${runId}/events`);

@@ -1,7 +1,7 @@
 import { Microphone, Stop } from "@phosphor-icons/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import { apiBase, approveRun, createRun, dictate, exportRun, listCases, openShare } from "./api";
+import { apiBase, approveRun, confirmRun, createRun, dictate, exportRun, listCases, openShare } from "./api";
 import { concatPcm, downsample, wavFromPcm16 } from "./audio";
 import { useApp } from "./store";
 import type { Run, SampleCase } from "./types";
@@ -73,6 +73,14 @@ export function Doctor() {
     }
   }
 
+  async function onConfirm() {
+    if (!run) return;
+    setBusy(true); setLocalError(null);
+    try { await confirmRun(run.run_id); }
+    catch (caught) { setLocalError(caught instanceof Error ? caught.message : "Confirmation failed"); }
+    finally { setBusy(false); }
+  }
+
   function editRow(index: number, value: string) {
     if (!run?.extraction) return;
     const next = structuredClone(run);
@@ -128,7 +136,7 @@ export function Doctor() {
     if (!run) return;
     if (recording) {
       setRecording(false);
-      socket.current?.send(JSON.stringify({ type: "endStream" }));
+      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "endStream" }));
       socket.current?.close();
       audioGear.current?.stream.getTracks().forEach((track) => track.stop());
       void audioGear.current?.context.close();
@@ -156,7 +164,7 @@ export function Doctor() {
     node.port.onmessage = (message: MessageEvent<Float32Array>) => {
       const pcm = downsample(message.data, context.sampleRate);
       chunks.current.push(pcm);
-      socket.current?.send(pcm.buffer);
+      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(pcm.buffer);
     };
     source.connect(node);
     const protocol = location.protocol === "https:" ? "wss" : "ws";
@@ -257,6 +265,7 @@ export function Doctor() {
         <div className="sheet">
           <img src={`${apiBase}${run.overlay_url}`} alt="Source page with hidden regions marked" />
         </div>
+        {run.status === "awaiting_confirmation" && <div className="stack" style={{ marginTop: 16 }}><p className="lede">Red marks what will stay hidden. Confirm the overlay before the page is read.</p><button className="primary" type="button" disabled={busy} onClick={() => void onConfirm()}>Confirm redaction</button></div>}
         <div className="row-actions">
           <button className="secondary" type="button" onClick={() => setScreen("start")}>
             Close

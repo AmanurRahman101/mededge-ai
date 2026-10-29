@@ -5,8 +5,10 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sse_starlette.sse import EventSourceResponse
 
+from app.auth.security import require_role, require_user
 from app.events import EventBus
 from app.limit import limiter
 from app.pipeline.cases import case_image
@@ -15,7 +17,7 @@ from app.pipeline.orchestrator import RunContext, new_run_id, pseudonym_for, sha
 from app.pipeline.schemas import EncounterFields, Extraction, LabRow, MedicationRow
 from app.pipeline.terminology import search_loinc
 from app.pipeline.verify import verify
-from app.store.db import Database, RunRow
+from app.store.db import Database, RunGrant, RunRow
 
 router = APIRouter()
 FILES = {"overlay.png", "redacted.png", "table.png"}
@@ -32,9 +34,18 @@ def _db(request: Request) -> Database:
 
 
 def _row_or_404(request: Request, run_id: str) -> RunRow:
+    user = require_user(request)
     row = _db(request).get(run_id)
-    if row is None:
+    if row is None or row.owner_id is None:
         raise HTTPException(status_code=404, detail="Unknown run")
+    if row.owner_id != user.id:
+        with _db(request).session() as session:
+            grant = session.get(RunGrant, (run_id, user.id))
+        expiry = grant.expires_at if grant is not None else None
+        if expiry is not None and expiry.tzinfo is None:
+            expiry = expiry.replace(tzinfo=UTC)
+        if user.role != "doctor" or expiry is None or expiry <= datetime.now(UTC):
+            raise HTTPException(status_code=404, detail="Unknown run")
     return row
 
 
@@ -48,6 +59,7 @@ async def create_run(
     auto_confirm: bool = Form(default=False),
     inject_fault: bool = Form(default=False),
 ) -> dict:
+    user = require_user(request)
     image_bytes: bytes | None = None
     mime = "image/jpeg"
     if case_id:
@@ -59,6 +71,8 @@ async def create_run(
     elif image is not None:
         image_bytes = await image.read()
         mime = image.content_type or "image/jpeg"
+        # The client cannot bypass confirmation for a real upload.
+        auto_confirm = False
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Upload a report or choose a sample case")
 
@@ -73,6 +87,7 @@ async def create_run(
             created_at=datetime.now(UTC),
             pseudonym=anon,
             inject_fault=inject_fault,
+            owner_id=user.id,
         )
     )
     bus: EventBus = request.app.state.bus
@@ -100,12 +115,18 @@ async def run_file(run_id: str, name: str, request: Request) -> Response:
     path = request.app.state.db.runs_dir / run_id / name
     if not path.is_file():
         raise HTTPException(status_code=404, detail="File not ready")
-    return Response(content=path.read_bytes(), media_type="image/png")
+    return Response(
+        content=path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-store"}
+    )
 
 
 @router.post("/api/runs/{run_id}/confirm")
 async def confirm_run(run_id: str, request: Request) -> dict:
-    _row_or_404(request, run_id)
+    row = _row_or_404(request, run_id)
+    if row.owner_id != require_user(request).id:
+        raise HTTPException(status_code=404, detail="Unknown run")
+    if row.status != "awaiting_confirmation":
+        raise HTTPException(status_code=409, detail="This run is not waiting for confirmation")
     if not request.app.state.orchestrator.confirm(run_id):
         raise HTTPException(status_code=409, detail="This run is not waiting for confirmation")
     return {"ok": True}
@@ -113,6 +134,7 @@ async def confirm_run(run_id: str, request: Request) -> dict:
 
 @router.post("/api/runs/{run_id}/approve")
 async def approve_run(run_id: str, body: ApproveBody, request: Request) -> dict:
+    require_role(request, "doctor")
     row = _row_or_404(request, run_id)
     if not row.extraction_json or not row.encounter_json:
         raise HTTPException(status_code=409, detail="Nothing to approve yet")
@@ -150,6 +172,7 @@ async def approve_run(run_id: str, body: ApproveBody, request: Request) -> dict:
 
 @router.post("/api/runs/{run_id}/export")
 async def export_run(run_id: str, request: Request) -> dict:
+    require_role(request, "doctor")
     row = _row_or_404(request, run_id)
     if row.status != "approved" or not row.bundle_json:
         raise HTTPException(status_code=409, detail="Approve the bundle before export")
@@ -172,6 +195,7 @@ async def dictate_run(
     request: Request,
     audio: UploadFile = File(),
 ) -> dict:
+    require_role(request, "doctor")
     row = _row_or_404(request, run_id)
     if row.status not in {"reviewing", "approved", "exported"}:
         raise HTTPException(status_code=409, detail="The record is not ready for a visit note")
@@ -199,19 +223,44 @@ async def dictate_run(
 
 @router.post("/api/runs/{run_id}/share")
 async def share_run(run_id: str, request: Request) -> dict:
+    user = require_role(request, "patient")
     row = _row_or_404(request, run_id)
+    if row.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Unknown run")
     if row.status not in {"reviewing", "approved", "exported"}:
         raise HTTPException(status_code=409, detail="The record is not ready to share")
-    code = row.share_code or share_code()
-    expires = datetime.now(UTC) + timedelta(hours=24)
-    request.app.state.db.update(run_id, share_code=code, share_expires=expires)
-    return {"code": code, "expires": expires.isoformat()}
+    now = datetime.now(UTC)
+    expires = now + timedelta(hours=24)
+    old_expires = row.share_expires
+    if old_expires is not None and old_expires.tzinfo is None:
+        old_expires = old_expires.replace(tzinfo=UTC)
+    active_code = row.share_code if old_expires and old_expires > now else None
+    for _ in range(20):
+        code = active_code or share_code()
+        # An expired code must not become valid again.
+        if not active_code and code == row.share_code:
+            continue
+        try:
+            with _db(request).session() as session:
+                stored = session.get(RunRow, run_id)
+                if stored is None or stored.owner_id != user.id:
+                    raise HTTPException(status_code=404, detail="Unknown run")
+                stored.share_code = code
+                stored.share_expires = expires
+                session.add(stored)
+                session.commit()
+            return {"code": code, "expires": expires.isoformat()}
+        except IntegrityError:
+            # The database's unique index arbitrates concurrent code creation.
+            active_code = None
+    raise HTTPException(status_code=503, detail="Could not create a share code. Try again.")
 
 
 @router.get("/api/runs/{run_id}/events")
 async def run_events(
     run_id: str, request: Request, last_event_id: str | None = Header(default=None)
 ) -> EventSourceResponse:
+    _row_or_404(request, run_id)
     bus: EventBus = request.app.state.bus
     if not bus.exists(run_id):
         raise HTTPException(status_code=404, detail="Unknown run")
@@ -219,6 +268,11 @@ async def run_events(
 
     async def stream():
         async for event in bus.subscribe(run_id, after_seq=after_seq):
+            # Stop delivering data after the session or record grant is revoked/expired.
+            try:
+                _row_or_404(request, run_id)
+            except HTTPException:
+                break
             yield {"event": "pipeline", "id": str(event.seq), "data": event.model_dump_json()}
         yield {"event": "end", "data": "{}"}
 
@@ -239,7 +293,8 @@ def _public(row: RunRow) -> dict:
         "used_fallback": row.used_fallback,
         "replay": row.replay,
         "inject_fault": row.inject_fault,
-        "share_code": row.share_code,
+        # Share codes are returned only by the owner's explicit share action.
+        "share_code": None,
         "overlay_url": f"/api/runs/{row.id}/files/overlay.png",
         "redacted_url": f"/api/runs/{row.id}/files/redacted.png",
     }

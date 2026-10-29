@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import func
+from sqlalchemy import delete, func, inspect, text
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from app.config import Settings
@@ -14,6 +14,7 @@ class RunRow(SQLModel, table=True):
     status: str
     created_at: datetime
     pseudonym: str
+    owner_id: str | None = Field(default=None, index=True)
     document_type: str | None = None
     extraction_json: str | None = None
     encounter_json: str | None = None
@@ -23,7 +24,7 @@ class RunRow(SQLModel, table=True):
     used_fallback: bool = False
     replay: bool = False
     inject_fault: bool = False
-    share_code: str | None = None
+    share_code: str | None = Field(default=None, unique=True, index=True)
     share_expires: datetime | None = None
 
 
@@ -38,6 +39,43 @@ class TermCache(SQLModel, table=True):
     payload: str
 
 
+class AuthUser(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    email: str = Field(index=True, unique=True)
+    full_name: str
+    password_hash: str
+    role: str
+    verified: bool = False
+    created_at: datetime
+
+
+class AuthSession(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    user_id: str = Field(index=True, foreign_key="authuser.id")
+    csrf_token: str
+    expires_at: datetime
+
+
+class AuthToken(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    user_id: str = Field(index=True, foreign_key="authuser.id")
+    kind: str
+    expires_at: datetime
+    consumed_at: datetime | None = None
+
+
+class AuthCounter(SQLModel, table=True):
+    key: str = Field(primary_key=True)
+    count: int = 0
+    expires_at: datetime
+
+
+class RunGrant(SQLModel, table=True):
+    run_id: str = Field(primary_key=True, foreign_key="runrow.id")
+    user_id: str = Field(primary_key=True, foreign_key="authuser.id")
+    expires_at: datetime
+
+
 class Database:
     def __init__(self, settings: Settings):
         url = settings.database_url
@@ -45,8 +83,21 @@ class Database:
             path = (BACKEND_DIR / url.removeprefix("sqlite:///")).resolve()
             path.parent.mkdir(parents=True, exist_ok=True)
             url = "sqlite:///" + path.as_posix()
-        self.engine = create_engine(url, connect_args={"check_same_thread": False})
+        if url.startswith("postgres://"):
+            url = "postgresql+psycopg://" + url.removeprefix("postgres://")
+        elif url.startswith("postgresql://"):
+            url = "postgresql+psycopg://" + url.removeprefix("postgresql://")
+        kwargs = (
+            {"connect_args": {"check_same_thread": False}}
+            if url.startswith("sqlite:")
+            else {"pool_size": 2, "max_overflow": 1, "pool_pre_ping": True}
+        )
+        self.engine = create_engine(url, **kwargs)
         SQLModel.metadata.create_all(self.engine)
+        # Existing prototype databases predate ownership. Keep old rows ownerless.
+        if "owner_id" not in {c["name"] for c in inspect(self.engine).get_columns("runrow")}:
+            with self.engine.begin() as connection:
+                connection.execute(text("ALTER TABLE runrow ADD COLUMN owner_id VARCHAR"))
         self.runs_dir = (BACKEND_DIR / settings.runs_dir).resolve()
         self.runs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -111,5 +162,6 @@ class Database:
                 if created.tzinfo is None:
                     created = created.replace(tzinfo=UTC)
                 if created < cutoff:
+                    session.exec(delete(RunGrant).where(RunGrant.run_id == row.id))
                     session.delete(row)
             session.commit()

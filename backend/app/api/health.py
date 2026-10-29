@@ -2,6 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, Request
 
+from app.auth.security import client_key, require_user, throttle
 from app.config import ROLES, Settings
 from app.models.providers import probe
 
@@ -26,6 +27,9 @@ async def health(request: Request, probe_providers: bool = False) -> dict:
 
     probes: dict[str, dict] = {}
     if probe_providers:
+        user = require_user(request)
+        throttle(request, "provider-probe-ip", client_key(request), 5, 60)
+        throttle(request, "provider-probe-user", user.id, 10, 3600)
         names = sorted(used)
         results = await asyncio.gather(
             *(probe(settings.endpoint(name), request.app.state.http) for name in names)

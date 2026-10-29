@@ -11,6 +11,8 @@ Built for the [Meta Global AI Developer Hackathon](https://dev.meta.ai/events/gl
 - **Patients** add a report, confirm what is hidden, see the values exactly as printed, and share a 6-character code.
 - **Doctors** open that code or upload a report, dictate an administrative visit note, review the result, and approve the export.
 
+Patients and doctors can register with an email address and password. Accounts require email verification; a doctor account is self-declared and is not verification of medical credentials. The fictional guest demo does not require an account and does not call models or create runs.
+
 ## Architecture
 
 ```mermaid
@@ -56,6 +58,7 @@ Python 3.11 and Node 22.
 py -3.11 -m venv backend\.venv
 backend\.venv\Scripts\python -m pip install -e "backend[dev]"
 copy .env.example .env
+backend\.venv\Scripts\python -m alembic -c backend\alembic.ini upgrade head
 backend\.venv\Scripts\python -m uvicorn app.main:app --app-dir backend --reload
 ```
 
@@ -65,11 +68,11 @@ npm install
 npm run dev
 ```
 
-The app is at http://localhost:5173. Put `MODEL_API_KEY` in `.env`. Without a key, the three fictional samples still open and are labeled as recorded readings.
+The app is at http://localhost:5173. In development, verification and password-reset emails are saved as `.eml` files in `backend/var/mail/`; open the newest file to use its link. These files contain authentication links and are gitignored. Put `MODEL_API_KEY` in `.env` to use live model features. Fictional samples remain available as recorded readings without a key.
 
 ```powershell
-backend\.venv\Scripts\python -m pytest
-backend\.venv\Scripts\python -m ruff check app tests
+backend\.venv\Scripts\python -m pytest -c backend\pyproject.toml backend\tests
+backend\.venv\Scripts\python -m ruff check backend\app backend\tests
 backend\.venv\Scripts\python scripts\eval.py
 ```
 
@@ -93,7 +96,18 @@ backend\.venv\Scripts\python scripts\eval.py
 
 ## Deploy
 
-`render.yaml` is the backend. `frontend/vercel.json` is the frontend. Set `VITE_API_BASE` to the Render URL and add that origin to `CORS_ORIGINS`. Dev routes stay off in production. Requests are limited to 30 per minute, and a daily budget stops new model calls. A sample case over budget replays its recorded reading and says so.
+`render.yaml` builds one Docker service with the React frontend and FastAPI backend on the same origin. Configure the following in Render's environment settings:
+
+- `APP_ENV=production` and `APP_BASE_URL` set to the HTTPS origin of the deployed app.
+- `DATABASE_URL` set to a pooled Neon PostgreSQL connection string with TLS. Set `DATABASE_URL_UNPOOLED` to the direct connection string for the same Neon database; the container uses it for Alembic migrations at startup. If omitted, migrations use `DATABASE_URL`, which is convenient for SQLite development.
+- `RESEND_API_KEY` and `RESEND_FROM_EMAIL` set to a sender on a verified domain or sending subdomain. Add the DNS records shown by Resend and wait for verification before inviting users. Disable open and click tracking for the sending domain so authentication links are not rewritten. Never commit credentials.
+- `MODEL_API_KEY` for live model features, plus the existing model and privacy configuration as needed.
+
+The auth email quota defaults to 90 messages/day and 2,500/month; `AUTH_EMAIL_DAILY_LIMIT` and `AUTH_EMAIL_MONTHLY_LIMIT` may lower these caps. Resend's own quotas apply across all applications using that account. If delivery is unavailable, account verification or recovery cannot complete until the service is restored. In production the app refuses to start without PostgreSQL, an HTTPS app URL, and a configured Resend sender/key.
+
+Render free services sleep and their filesystem is ephemeral. Accounts and sessions persist in Neon; uploaded images do not persist through a restart or redeploy. Use fictional data for the demo and configure appropriate persistent storage before expecting images to survive. Dev routes stay off in production, and a daily budget limits new model calls.
+
+Render deploys a Git commit or published image, not uncommitted files. Publish the reviewed MedEdge changes to the chosen repository branch or image before connecting the new service. Keep existing services for other projects separate.
 
 Local SAM 3.1 is `SAM_PROVIDER=local` plus `SAM_LOCAL_CHECKPOINT`. Without the weights the call fails with a clear error and the Meta API remains the default.
 

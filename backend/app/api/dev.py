@@ -1,9 +1,12 @@
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Request
 
+from app.auth.security import require_user
 from app.events import EventBus, EventKind, Stage
+from app.store.db import RunRow
 
 router = APIRouter(prefix="/api/dev")
 
@@ -33,8 +36,18 @@ async def _play(bus: EventBus, run_id: str, delay_s: float) -> None:
 
 @router.post("/simulate")
 async def simulate(request: Request, delay_ms: int = 400) -> dict:
+    user = require_user(request)
     bus: EventBus = request.app.state.bus
     run_id = f"sim-{uuid.uuid4().hex[:10]}"
+    request.app.state.db.add(
+        RunRow(
+            id=run_id,
+            status="simulated",
+            created_at=datetime.now(UTC),
+            pseudonym="PT-SAMPLE",
+            owner_id=user.id,
+        )
+    )
     bus.open(run_id)
     task = asyncio.create_task(_play(bus, run_id, max(delay_ms, 0) / 1000))
     tasks: set[asyncio.Task] = request.app.state.tasks

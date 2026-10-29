@@ -44,7 +44,14 @@ def _replay_item(item: dict) -> dict | None:
             "arguments": item.get("arguments") or "{}",
         }
     if kind == "reasoning" and item.get("encrypted_content"):
-        return {"type": "reasoning", "encrypted_content": item["encrypted_content"]}
+        replay = {
+            "type": "reasoning",
+            "summary": item.get("summary") or [],
+            "encrypted_content": item["encrypted_content"],
+        }
+        if item.get("id"):
+            replay["id"] = item["id"]
+        return replay
     if kind == "message":
         content = [
             {"type": "output_text", "text": part.get("text") or ""}
@@ -52,7 +59,10 @@ def _replay_item(item: dict) -> dict | None:
             if part.get("type") == "output_text"
         ]
         if content:
-            return {"type": "message", "role": "assistant", "content": content}
+            replay = {"type": "message", "role": "assistant", "content": content}
+            if item.get("phase"):
+                replay["phase"] = item["phase"]
+            return replay
     return None
 
 
@@ -109,6 +119,7 @@ async def run_agent(
             "input": conversation,
             "tools": tool_specs(),
             "store": False,
+            "include": ["reasoning.encrypted_content"],
             "reasoning": {"effort": "low"},
             "max_output_tokens": 16384,
         }

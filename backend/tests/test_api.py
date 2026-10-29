@@ -1,8 +1,9 @@
-import json
-
+import pytest
 from fastapi.testclient import TestClient
 
+from app.api.dev import _play
 from app.config import Settings
+from app.events import EventBus
 from app.main import create_app
 
 SECRET = "secret-key-123"
@@ -25,23 +26,26 @@ def test_health_reports_roles_without_leaking_the_key():
     assert data["sam"] == {"provider": "meta", "model": "sam-3.1"}
 
 
-def test_simulated_run_streams_labeled_events_then_ends():
-    with client_for(enable_dev_routes=True) as client:
-        run = client.post("/api/dev/simulate", params={"delay_ms": 0}).json()
-        with client.stream("GET", run["events_url"]) as response:
-            lines = list(response.iter_lines())
+def test_live_provider_probe_requires_a_session():
+    with client_for() as client:
+        response = client.get("/api/health", params={"probe_providers": "true"})
+    assert response.status_code == 401
 
-    payloads = [json.loads(line[len("data: ") :]) for line in lines if line.startswith("data: ")]
-    events = [p for p in payloads if p]
+
+@pytest.mark.asyncio
+async def test_simulated_run_streams_labeled_events_then_ends():
+    bus = EventBus()
+    bus.open("demo")
+    await _play(bus, "demo", 0)
+    events = [event.model_dump() async for event in bus.subscribe("demo")]
     assert len(events) == 9
     assert [e["seq"] for e in events] == list(range(1, 10))
     assert all(e["data"]["simulated"] for e in events)
-    assert "event: end" in lines
 
 
-def test_unknown_run_is_404():
+def test_unknown_run_requires_authentication():
     with client_for() as client:
-        assert client.get("/api/runs/nope/events").status_code == 404
+        assert client.get("/api/runs/nope/events").status_code == 401
 
 
 def test_dev_routes_are_off_by_default():

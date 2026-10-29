@@ -125,4 +125,6 @@ async def segment_concept(
         raise ProviderError("SAM timed out", retryable=True) from exc
     except httpx.TransportError as exc:
         raise ProviderError(f"SAM unreachable: {exc}", retryable=True) from exc
-    return "\n".join(chunks)
+    # Deltas are arbitrary fragments, not complete lines. Inserting separators
+    # can split SAM's box markers or coordinate fields and lose detections.
+    return "".join(chunks)
