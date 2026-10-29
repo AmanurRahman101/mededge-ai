@@ -43,3 +43,26 @@ async def test_streamed_box_survives_arbitrary_delta_boundaries():
     assert parse_boxes(raw) == [SamBox(1, 10, 20, 30, 40, 100, 80, None)]
     assert seen[0]["model"] == "sam-3.1"
     assert seen[0]["store"] is False
+
+
+async def test_segment_page_limits_concurrency_and_keeps_all_concepts(monkeypatch):
+    import asyncio
+
+    from app.pipeline import segment
+
+    active = 0
+    calls = []
+
+    async def fake_segment(_http, _settings, _image, concept):
+        nonlocal active
+        active += 1
+        assert active == 1
+        calls.append(concept)
+        await asyncio.sleep(0)
+        active -= 1
+        return "1<|box;x1=1;y1=2;x2=3;y2=4;w=10;h=10|>"
+
+    monkeypatch.setattr(segment, "segment_concept", fake_segment)
+    result = await segment.segment_page(None, Settings(_env_file=None), ImagePart(b"image"))
+    assert calls == list(segment.CONCEPTS)
+    assert all(len(result[concept]) == 1 for concept in segment.CONCEPTS)

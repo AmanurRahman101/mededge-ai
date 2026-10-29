@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import io
 import json
 import secrets
 import uuid
@@ -7,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 import httpx
+from PIL import Image
 
 from app.config import Settings
 from app.events import EventBus, EventKind, Stage
@@ -30,6 +32,16 @@ SAM_CALL_USD = 0.01
 EXTRACT_USD = 0.04
 AGENT_USD = 0.08
 VOICE_USD = 0.01
+
+
+def validate_image_size(data: bytes) -> None:
+    with Image.open(io.BytesIO(data)) as original:
+        width, height = original.size
+        if width * height > 3_000_000:
+            raise ValueError(
+                "Image is too large to process on this server. Resize it to at most "
+                "3 megapixels and upload it again."
+            )
 
 
 @dataclass
@@ -112,6 +124,8 @@ class Orchestrator:
             self.db.update(run_id, status="failed", replay=True)
             return
 
+        # Reject large photos rather than silently reducing detail or exhausting the host.
+        validate_image_size(ctx.image)
         image = ImagePart(ctx.image, ctx.mime)
         self.bus.publish(
             run_id,
@@ -143,6 +157,7 @@ class Orchestrator:
 
         decoded = cv2.imdecode(np.frombuffer(ctx.image, dtype=np.uint8), cv2.IMREAD_COLOR)
         anchors = identifier_boxes(read_text_boxes(decoded)) if decoded is not None else []
+        del decoded
         result = redact(ctx.image, regions, anchors)
         folder = self.db.runs_dir / run_id
         folder.mkdir(parents=True, exist_ok=True)

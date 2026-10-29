@@ -70,9 +70,9 @@ def _paint(
     overlay: np.ndarray, box: tuple[int, int, int, int], color: tuple[int, int, int]
 ) -> None:
     x1, y1, x2, y2 = box
-    tint = overlay.copy()
-    cv2.rectangle(tint, (x1, y1), (x2, y2), color, thickness=-1)
-    cv2.addWeighted(tint, 0.35, overlay, 0.65, 0, dst=overlay)
+    area = overlay[y1:y2, x1:x2]
+    tint = np.full_like(area, color)
+    cv2.addWeighted(tint, 0.35, area, 0.65, 0, dst=area)
     cv2.rectangle(overlay, (x1, y1), (x2, y2), color, thickness=2)
 
 

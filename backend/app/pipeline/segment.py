@@ -1,4 +1,3 @@
-import asyncio
 import json
 import re
 from dataclasses import dataclass
@@ -56,10 +55,11 @@ async def segment_page(
         from app.pipeline.sam_local import segment_local
 
         return await segment_local(image, CONCEPTS, settings.sam_local_checkpoint)
-    raw = await asyncio.gather(
-        *(segment_concept(http, settings, image, concept) for concept in CONCEPTS)
-    )
-    return {concept: parse_boxes(text) for concept, text in zip(CONCEPTS, raw, strict=True)}
+    # Seven concurrent image payloads and masks can exceed a small instance's memory.
+    result = {}
+    for concept in CONCEPTS:
+        result[concept] = parse_boxes(await segment_concept(http, settings, image, concept))
+    return result
 
 
 async def segment_concept(
@@ -67,7 +67,7 @@ async def segment_concept(
 ) -> str:
     """Stream one SAM 3.1 concept prompt and return the raw output text.
 
-    SAM takes one short noun phrase per request; callers fan out concepts in parallel.
+    SAM takes one short noun phrase per request.
     """
     if settings.sam_provider != "meta":
         raise NotImplementedError("Local SAM 3.1 edge mode is not wired up yet")

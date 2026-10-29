@@ -25,7 +25,7 @@ def _engine():
         from rapidocr_onnxruntime import RapidOCR
     except ImportError:
         return None
-    return RapidOCR()
+    return RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
 
 
 def read_text_boxes(image_bgr: np.ndarray) -> list[TextBox]:
