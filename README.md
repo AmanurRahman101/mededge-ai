@@ -109,6 +109,8 @@ Render free services sleep and their filesystem is ephemeral. Accounts and sessi
 
 Render deploys a Git commit or published image, not uncommitted files. Publish the reviewed MedEdge changes to the chosen repository branch or image before connecting the new service. Keep existing services for other projects separate.
 
+The MedEdge Render service tracks `codex/mededge-auth-deploy`; pushes to that branch trigger a new deployment when the GitHub provider connection is active.
+
 Local SAM 3.1 is `SAM_PROVIDER=local` plus `SAM_LOCAL_CHECKPOINT`. Without the weights the call fails with a clear error and the Meta API remains the default.
 
 ## Demo
