@@ -53,6 +53,8 @@ def test_resend_verification_and_recovery_requests_are_private_and_well_formed(t
             assert body["subject"] == "MedEdge AI: Verify your email"
             assert "http://localhost:5173/verify-email#token=" in body["text"]
             assert "http://localhost:5173/verify-email#token=" in body["html"]
+            assert "Verify email address" in body["html"]
+            assert "24 hours" in body["text"] and "24 hours" in body["html"]
             assert "Example Person" not in body["html"]
             assert "ExamplePass*1" not in body["text"] + body["html"]
 
@@ -79,12 +81,23 @@ def test_resend_verification_and_recovery_requests_are_private_and_well_formed(t
             body = json.loads(recovery.content)
             assert body["subject"] == "MedEdge AI: Reset your password"
             assert "http://localhost:5173/reset-password#token=" in body["text"]
+            assert "Reset password" in body["html"]
+            assert "30 minutes" in body["text"] and "30 minutes" in body["html"]
             assert recovery.headers["Idempotency-Key"] != verification.headers["Idempotency-Key"]
         finally:
             import asyncio
 
             asyncio.run(mock_http.aclose())
             client.app.state.http = original_http
+
+
+def test_auth_email_escapes_link_in_html():
+    from app.auth.email import _auth_message
+
+    _, plain, body = _auth_message("verify", 'https://example.org/?x="<test>&y=1')
+    assert 'https://example.org/?x="<test>&y=1' in plain
+    assert '&quot;&lt;test&gt;&amp;y=1' in body
+    assert '<test>' not in body
 
 
 def test_resend_network_failure_does_not_verify_or_expose_secret(tmp_path):

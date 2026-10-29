@@ -1,3 +1,4 @@
+# ruff: noqa: E501 -- Inline styles keep the transactional email compatible with mail clients.
 import html
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -63,21 +64,52 @@ def _reserve(request, address: str) -> None:
         session.commit()
 
 
+def _auth_message(kind: str, link: str) -> tuple[str, str, str]:
+    verify = kind == "verify"
+    title = "Verify your email" if verify else "Reset your password"
+    description = (
+        "Confirm your email address to finish setting up your MedEdge account."
+        if verify
+        else "We received a request to reset the password for your MedEdge account."
+    )
+    action = "Verify email address" if verify else "Reset password"
+    expiry = "24 hours" if verify else "30 minutes"
+    safe_link = html.escape(link, quote=True)
+    plain = (
+        f"MedEdge AI\n\n{title}\n\n{description}\n\n{action}:\n{link}\n\n"
+        f"This link expires in {expiry}. Opening the link will ask you to confirm.\n\n"
+        "If you did not request this email, you can safely ignore it.\n"
+    )
+    body = f'''<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title></head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:Arial,Helvetica,sans-serif;color:#18181b;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{description} This link expires in {expiry}.</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f4f4f5;"><tr><td align="center" style="padding:36px 16px 40px;">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:560px;">
+<tr><td style="padding:0 4px 18px;font-size:15px;font-weight:700;letter-spacing:-0.3px;color:#18181b;">MedEdge <span style="color:#71717a;font-weight:400;">AI</span></td></tr>
+<tr><td style="background-color:#18181b;border-radius:16px 16px 0 0;padding:32px 36px;">
+<div style="color:#a1a1aa;font-size:11px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;">Account security &nbsp; / &nbsp; MedEdge AI</div>
+<div style="padding-top:26px;color:#fafafa;font-size:30px;line-height:1.18;letter-spacing:-1px;font-weight:700;">{title}.</div>
+</td></tr>
+<tr><td style="background-color:#ffffff;border:1px solid #e4e4e7;border-top:0;border-radius:0 0 16px 16px;padding:34px 36px;">
+<p style="margin:0 0 26px;color:#52525b;font-size:16px;line-height:1.6;">{description}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-radius:8px;background-color:#18181b;"><a href="{safe_link}" style="display:inline-block;padding:15px 23px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;">{action} &nbsp; &#8594;</a></td></tr></table>
+<p style="margin:24px 0 0;color:#71717a;font-size:13px;line-height:1.6;">This link expires in <strong style="color:#3f3f46;">{expiry}</strong>. You’ll be asked to confirm on the next screen.</p>
+<div style="height:1px;background-color:#e4e4e7;margin:28px 0;"></div>
+<p style="margin:0 0 8px;color:#3f3f46;font-size:13px;font-weight:700;">Button not working?</p>
+<p style="margin:0;color:#71717a;font-size:12px;line-height:1.6;overflow-wrap:anywhere;word-break:break-all;">Copy and paste this link into your browser:<br><a href="{safe_link}" style="color:#52525b;text-decoration:underline;">{safe_link}</a></p>
+</td></tr>
+<tr><td style="padding:22px 4px 0;color:#71717a;font-size:12px;line-height:1.6;">If you didn’t request this email, you can safely ignore it.<br><span style="color:#a1a1aa;">MedEdge AI &nbsp; / &nbsp; Account security</span></td></tr>
+</table></td></tr></table></body></html>'''
+    return title, plain, body
+
+
 async def send_auth_mail(request, address: str, token: str, kind: str) -> None:
     settings = request.app.state.settings
     _reserve(request, address)
     route = "verify-email" if kind == "verify" else "reset-password"
-    title = "Verify your email" if kind == "verify" else "Reset your password"
     link = f"{settings.app_base_url.rstrip('/')}/{route}#token={token}"
-    plain = (
-        f"{title}\n\nOpen this link to continue:\n{link}\n\n"
-        "If you did not request this, you can ignore this message.\n"
-    )
-    body = (
-        f'<p>{html.escape(title)}</p><p><a href="{html.escape(link, quote=True)}">'
-        "Continue securely</a></p>"
-        "<p>If you did not request this, you can ignore this message.</p>"
-    )
+    title, plain, body = _auth_message(kind, link)
     if settings.app_env != "production" and not settings.resend_api_key:
         folder = request.app.state.db.runs_dir.parent / "mail"
         folder.mkdir(parents=True, exist_ok=True)
