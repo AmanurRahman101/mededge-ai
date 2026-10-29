@@ -16,3 +16,25 @@ def test_image_size_guard_accepts_sample_sized_image_and_rejects_large_image():
     validate_image_size(image_bytes((1402, 1884)))
     with pytest.raises(ValueError, match="3 megapixels"):
         validate_image_size(image_bytes((3000, 2000)))
+
+
+def test_ocr_uses_bounded_working_size_and_preserves_box_coordinates(monkeypatch):
+    import numpy as np
+    import rapidocr_onnxruntime
+
+    from app.pipeline.ocr_anchors import read_text_boxes
+
+    options = {}
+
+    class FakeOCR:
+        def __init__(self, **kwargs):
+            options.update(kwargs)
+
+        def __call__(self, image):
+            assert image.shape[:2] == (1884, 1402)
+            return [([[100, 200], [300, 200], [300, 250], [100, 250]], "Name", 0.9)], 0
+
+    monkeypatch.setattr(rapidocr_onnxruntime, "RapidOCR", FakeOCR)
+    boxes = read_text_boxes(np.zeros((1884, 1402, 3), dtype=np.uint8))
+    assert options["max_side_len"] == 1200
+    assert (boxes[0].x1, boxes[0].y1, boxes[0].x2, boxes[0].y2) == (100, 200, 300, 250)

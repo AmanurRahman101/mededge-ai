@@ -25,7 +25,9 @@ def _engine():
         from rapidocr_onnxruntime import RapidOCR
     except ImportError:
         return None
-    return RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1)
+    # Bound OCR's internal working image; RapidOCR maps the resulting boxes back
+    # to original-image coordinates. The redacted output stays full resolution.
+    return RapidOCR(intra_op_num_threads=1, inter_op_num_threads=1, max_side_len=1200)
 
 
 def read_text_boxes(image_bgr: np.ndarray) -> list[TextBox]:
