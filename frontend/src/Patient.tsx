@@ -167,6 +167,13 @@ export function Patient() {
               ))}
             </tbody>
           </table>
+          {run.extraction.advised_tests.length > 0 && (
+            <section aria-label="Advised tests">
+              <h2>Tests as written</h2>
+              <ul>{run.extraction.advised_tests.map((test, index) => <li key={`${test.raw_name}-${index}`}>{test.raw_name}</li>)}</ul>
+            </section>
+          )}
+          {!run.replay && <p className="banner review">AI readings can miss or misread details. Check the original with a clinician before using this result.</p>}
           <button className="primary" type="button" disabled={busy} onClick={() => void onShare()}>
             Share with a doctor
           </button>

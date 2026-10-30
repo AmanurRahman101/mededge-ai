@@ -349,6 +349,13 @@ export function Doctor() {
             </tbody>
           </table>
         )}
+        {tab === "values" && run.extraction && run.extraction.advised_tests.length > 0 && (
+          <section aria-label="Advised tests">
+            <h3>Tests as written</h3>
+            <ul>{run.extraction.advised_tests.map((test, index) => <li key={`${test.raw_name}-${index}`}>{test.raw_name}</li>)}</ul>
+            <p className="lede">These tests are shown for review; they are not included in the FHIR export.</p>
+          </section>
+        )}
         {tab === "values" && run.encounter && (
           <label className="stack" style={{ marginTop: 16 }}>
             Visit note
