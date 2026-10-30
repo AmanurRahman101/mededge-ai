@@ -1,383 +1,218 @@
-import { Microphone, Stop } from "@phosphor-icons/react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 
-import { apiBase, approveRun, confirmRun, createRun, dictate, exportRun, listCases, openShare } from "./api";
+import { apiBase, approveRun, confirmRun, createRun, getChart, post } from "./api";
 import { concatPcm, downsample, wavFromPcm16 } from "./audio";
-import { useApp } from "./store";
-import type { Run, SampleCase } from "./types";
+import { navigate } from "./navigation";
 import { useRun } from "./useRun";
+import "./Doctor.css";
 
-function loincFor(run: Run, name: string): string | null {
-  const entries = (run.bundle?.entry as { resource?: Record<string, unknown> }[] | undefined) ?? [];
-  for (const entry of entries) {
-    const resource = entry.resource;
-    if (!resource || resource.resourceType !== "Observation") continue;
-    const code = resource.code as { text?: string; coding?: { code?: string }[] } | undefined;
-    if (code?.text?.toLowerCase() !== name.toLowerCase()) continue;
-    return code.coding?.[0]?.code ?? null;
-  }
-  return null;
+type Connection = { patient_id: string | null; request_id: string; status: string; name: string | null; email: string | null };
+type RecordItem = { run_id: string; title: string; status: string; document_type: string | null; created_at: string; source_available: boolean };
+type Summary = { id: string; author_id: string; author_name?: string; transcript: string; summary_en: string; summary_bn: string; unresolved: string | string[]; status: string; published_at: string | null };
+
+function textError(error: unknown) { return error instanceof Error ? error.message : "Something went wrong. Please try again."; }
+function issues(value: string | string[]): string[] {
+  if (Array.isArray(value)) return value;
+  try { const parsed: unknown = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : []; }
+  catch { return value ? [value] : []; }
 }
 
-export function Doctor() {
-  const setScreen = useApp((state) => state.setScreen);
-  const [runId, setRunId] = useState<string | null>(null);
-  const [shared, setShared] = useState<Run | null>(null);
-  const [code, setCode] = useState("");
-  const [cases, setCases] = useState<SampleCase[]>([]);
-  const [inject, setInject] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"values" | "fhir">("values");
-  const [traceOpen, setTraceOpen] = useState(false);
-  const [caption, setCaption] = useState("");
+function useRecorder() {
   const [recording, setRecording] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [audio, setAudio] = useState<Blob | null>(null);
+  const [error, setError] = useState("");
+  const gear = useRef<{ stream: MediaStream; context: AudioContext; node: AudioWorkletNode; source: MediaStreamAudioSourceNode; sink: GainNode; timer: number } | null>(null);
+  const alive = useRef(true);
   const chunks = useRef<Int16Array[]>([]);
-  const socket = useRef<WebSocket | null>(null);
-  const audioGear = useRef<{ context: AudioContext; stream: MediaStream } | null>(null);
-  const { run: live, setRun, events, error } = useRun(runId);
-  const run = live ?? shared;
-
-  useEffect(() => {
-    void listCases()
-      .then(setCases)
-      .catch(() => setCases([]));
+  const samples = useRef(0);
+  const startingRef = useRef(false);
+  const stopRef = useRef<() => void>(() => {});
+  const dispose = useCallback(() => {
+    const current = gear.current;
+    if (!current) return;
+    gear.current = null;
+    window.clearTimeout(current.timer);
+    current.node.port.onmessage = null;
+    current.source.disconnect(); current.node.disconnect(); current.sink.disconnect();
+    current.stream.getTracks().forEach((track) => track.stop());
+    void current.context.close();
   }, []);
-
-  async function start(form: FormData) {
-    setBusy(true);
-    setLocalError(null);
-    setShared(null);
+  const stop = useCallback(() => {
+    if (!gear.current) return;
+    dispose(); setRecording(false);
+    if (samples.current > 0) setAudio(wavFromPcm16(concatPcm(chunks.current)));
+    else { setAudio(null); setError("No audio was captured. Check your microphone and try again."); }
+    chunks.current = []; samples.current = 0;
+  }, [dispose]);
+  stopRef.current = stop;
+  useEffect(() => { alive.current = true; return () => { alive.current = false; dispose(); }; }, [dispose]);
+  async function start() {
+    if (gear.current || startingRef.current) return;
+    startingRef.current = true; setStarting(true);
+    setError(""); setAudio(null); chunks.current = []; samples.current = 0;
+    let stream: MediaStream | undefined;
+    let context: AudioContext | undefined;
     try {
-      if (inject) form.append("inject_fault", "true");
-      const created = await createRun(form);
-      setRunId(created.run_id);
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!alive.current) { stream.getTracks().forEach((track) => track.stop()); return; }
+      context = new AudioContext();
+      await context.audioWorklet.addModule("/pcm16-worklet.js");
+      if (!alive.current) { stream.getTracks().forEach((track) => track.stop()); void context.close(); return; }
+      const source = context.createMediaStreamSource(stream);
+      const node = new AudioWorkletNode(context, "pcm16");
+      const sink = context.createGain(); sink.gain.value = 0;
+      source.connect(node); node.connect(sink); sink.connect(context.destination);
+      const rate = context.sampleRate;
+      node.port.onmessage = (message: MessageEvent<Float32Array>) => {
+        const part = downsample(message.data, rate);
+        const remaining = 180 * 24000 - samples.current;
+        if (remaining <= 0) { stopRef.current(); return; }
+        const bounded = part.subarray(0, remaining);
+        chunks.current.push(bounded); samples.current += bounded.length;
+        if (samples.current >= 180 * 24000) stopRef.current();
+      };
+      const timer = window.setTimeout(() => stopRef.current(), 180_000);
+      gear.current = { stream, context, node, source, sink, timer }; setRecording(true);
     } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "Could not open the report");
+      stream?.getTracks().forEach((track) => track.stop());
+      if (context) void context.close();
+      if (alive.current) setError(caught instanceof Error ? `Microphone unavailable: ${caught.message}` : "Microphone unavailable.");
     } finally {
-      setBusy(false);
+      startingRef.current = false;
+      if (alive.current) setStarting(false);
     }
   }
+  return { audio, recording, starting, error, start, stop, discard: () => { setAudio(null); setError(""); } };
+}
 
-  async function onOpenCode(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setLocalError(null);
-    setRunId(null);
-    try {
-      setShared(await openShare(code.trim()));
-    } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "That code did not open");
-    } finally {
-      setBusy(false);
+export function Doctor({ initialRunId = null }: { initialRunId?: string | null }) {
+  const [connections, setConnections] = useState<Connection[]>([]);
+  const [patientId, setPatientId] = useState("");
+  const [records, setRecords] = useState<RecordItem[]>([]);
+  const [more, setMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [code, setCode] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const [sourceRunId, setSourceRunId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [summaries, setSummaries] = useState<Summary[]>([]);
+  const [draft, setDraft] = useState<Summary | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [imageMissing, setImageMissing] = useState(false);
+  const key = useRef(crypto.randomUUID());
+  const recorder = useRecorder();
+  const { run, events, error: runError, setRun } = useRun(initialRunId);
+  const selectedPatient = connections.find((c) => c.patient_id === patientId && c.status === "approved");
+
+  const loadConnections = useCallback(async () => {
+    const data = await getChart<{ connections: Connection[] }>("/connections"); setConnections(data.connections);
+  }, []);
+  const loadRecords = useCallback(async (id: string, page: number) => {
+    const data = await getChart<{ records: RecordItem[]; has_more: boolean }>(`/records?patient_id=${encodeURIComponent(id)}&offset=${page}&limit=20`);
+    setRecords(data.records); setMore(data.has_more);
+  }, []);
+  const loadSummaries = useCallback(async (id: string) => {
+    const data = await getChart<{ summaries: Summary[] }>(`/records/${encodeURIComponent(id)}/summaries`);
+    setSummaries(data.summaries); setDraft(data.summaries.find((entry) => entry.status === "draft") || null); setAcknowledged(false);
+  }, []);
+  useEffect(() => { void loadConnections().catch((caught) => setError(textError(caught))); }, [loadConnections]);
+  useEffect(() => {
+    if (patientId) void loadRecords(patientId, offset).catch((caught) => setError(textError(caught)));
+    else { setRecords([]); setMore(false); }
+  }, [patientId, offset, loadRecords]);
+  useEffect(() => {
+    if (run && ["reviewing", "approved", "exported"].includes(run.status)) {
+      void loadSummaries(run.run_id).catch((caught) => setError(textError(caught)));
     }
-  }
+  }, [run?.run_id, run?.status, loadSummaries]);
 
-  async function onConfirm() {
+  async function requestAccess(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError(""); setNotice("");
+    try { await post("/api/chart/requests", { code: code.trim().toUpperCase() }); setCode(""); setNotice("Request sent. The patient must approve access before you can open their chart."); await loadConnections(); }
+    catch (caught) { setError(textError(caught)); } finally { setBusy(false); }
+  }
+  async function disconnect(id: string) {
+    if (!window.confirm("Disconnect from this patient? You will lose access to their chart.")) return;
+    setBusy(true); setError("");
+    try { await post(`/api/chart/connections/${encodeURIComponent(id)}/revoke`); setPatientId(""); await loadConnections(); setNotice("Patient disconnected."); }
+    catch (caught) { setError(textError(caught)); } finally { setBusy(false); }
+  }
+  async function cancelRequest(id: string) {
+    setBusy(true); setError("");
+    try { await post(`/api/chart/requests/${encodeURIComponent(id)}/cancel`); await loadConnections(); setNotice("Request cancelled."); }
+    catch (caught) { setError(textError(caught)); } finally { setBusy(false); }
+  }
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setError(""); setNotice("");
+    if (!selectedPatient || (!image && !sourceRunId) || !recorder.audio) { setError("Choose a connected patient, add a report image, and record your explanation."); return; }
+    const form = new FormData();
+    form.append("patient_id", patientId); if (image) form.append("image", image); else form.append("source_run_id", sourceRunId); form.append("audio", recorder.audio, "explanation.wav"); form.append("idempotency_key", key.current);
+    setBusy(true);
+    try { const created = await createRun(form); key.current = crypto.randomUUID(); navigate(`/doctor/records/${created.run_id}`); }
+    catch (caught) { setError(textError(caught)); } finally { setBusy(false); }
+  }
+  async function confirm() {
     if (!run) return;
-    setBusy(true); setLocalError(null);
-    try { await confirmRun(run.run_id); }
-    catch (caught) { setLocalError(caught instanceof Error ? caught.message : "Confirmation failed"); }
-    finally { setBusy(false); }
+    setBusy(true); setError("");
+    try { await confirmRun(run.run_id); setNotice("Redaction confirmed. Preparing the draft…"); }
+    catch (caught) { setError(textError(caught)); } finally { setBusy(false); }
   }
-
-  function editRow(index: number, value: string) {
+  async function save(publish: boolean) {
+    if (!run || !draft) return;
+    if (publish && !acknowledged) { setError("Confirm you have reviewed the transcript and both summaries."); return; }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await post(`/api/chart/records/${encodeURIComponent(run.run_id)}/summaries/${encodeURIComponent(draft.id)}?publish=${publish}`, { transcript: draft.transcript, summary_en: draft.summary_en, summary_bn: draft.summary_bn, acknowledge_unresolved: acknowledged, reviewed_both_languages: acknowledged });
+      await loadSummaries(run.run_id); setNotice(publish ? "Summary published to the patient’s chart." : "Draft saved.");
+    } catch (caught) { setError(textError(caught)); } finally { setBusy(false); }
+  }
+  async function approve() {
+    if (!run) return;
+    setBusy(true); setError("");
+    try { const bundle = await approveRun(run.run_id, run); setRun({ ...run, status: "approved", bundle }); setNotice("FHIR bundle approved. You can download it below."); }
+    catch (caught) { setError(textError(caught)); } finally { setBusy(false); }
+  }
+  function editLabValue(index: number, value: string) {
     if (!run?.extraction) return;
     const next = structuredClone(run);
     const row = next.extraction?.rows[index];
-    if (!row || !next.extraction) return;
-    row.value = value === "" ? null : Number(value);
-    if (live) setRun(next);
-    else setShared(next);
+    if (!row) return;
+    const parsed = value === "" ? null : Number(value);
+    if (parsed !== null && !Number.isFinite(parsed)) return;
+    row.value = parsed;
+    setRun(next);
+  }
+  function download() {
+    if (!run?.bundle || run.status !== "approved") return;
+    const link = document.createElement("a"); link.href = `${apiBase}/api/chart/records/${encodeURIComponent(run.run_id)}/download`; link.click();
   }
 
-  function editNote(note: string) {
-    if (!run?.encounter) return;
-    const next = structuredClone(run);
-    if (!next.encounter) return;
-    next.encounter.note = note;
-    if (live) setRun(next);
-    else setShared(next);
-  }
+  if (!run && initialRunId) return <main className="stage"><button className="secondary" type="button" onClick={() => navigate("/doctor")}>Back to patients</button><h1>Opening record</h1>{(error || runError) && <p className="banner pii" role="alert">{error || runError}</p>}</main>;
 
-  async function onApprove() {
-    if (!run) return;
-    setBusy(true);
-    setLocalError(null);
-    try {
-      const bundle = await approveRun(run.run_id, run);
-      const approved = { ...run, status: "approved", bundle };
-      if (live) setRun(approved);
-      else setShared(approved);
-      try {
-        await exportRun(run.run_id);
-        const exported = { ...approved, status: "exported" };
-        if (live) setRun(exported);
-        else setShared(exported);
-      } catch (caught) {
-        const message = caught instanceof Error ? caught.message : "Export failed";
-        setLocalError(`Approved locally. The FHIR server refused the export: ${message}`);
-        const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/fhir+json" });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `${run.pseudonym}.json`;
-        link.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "Approval failed");
-    } finally {
-      setBusy(false);
-    }
-  }
+  if (!run) return <main className="stage doctor-chart">
+    <p className="chart-eyebrow">DOCTOR WORKSPACE</p><h1>Care, connected.</h1><p className="lede">Access a patient’s chart after they approve your request. Your doctor account is self-declared.</p>
+    {(error || recorder.error) && <p className="banner pii" role="alert">{error || recorder.error}</p>}{notice && <p className="banner review" role="status">{notice}</p>}
+    <section className="doctor-section"><h2>Connect with a patient</h2><p className="lede">Enter their six-character code. They’ll review and approve your request.</p><form className="doctor-connect" onSubmit={(event) => void requestAccess(event)}><label htmlFor="patient-code">Patient code</label><div className="row-actions"><input id="patient-code" value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} autoComplete="off" maxLength={6} placeholder="ABC234" /><button className="primary" disabled={busy || code.trim().length !== 6}>Request access</button></div></form></section>
+    <section className="doctor-section"><div className="doctor-section-head"><div><h2>My patients</h2><p className="lede">Available while patient consent is active.</p></div><button className="secondary" onClick={() => void loadConnections().catch((caught) => setError(textError(caught)))}>Refresh</button></div>
+      {connections.filter((c) => c.status === "pending").map((c) => <div className="banner review" key={c.request_id}><p>A connection request is awaiting patient approval.</p><button type="button" className="secondary" disabled={busy} onClick={() => void cancelRequest(c.request_id)}>Cancel request</button></div>)}
+      {connections.filter((c) => c.status === "approved").length === 0 && <p className="lede">No connected patients yet. Request access using a patient’s code.</p>}
+      <div className="doctor-patient-list">{connections.filter((c) => c.status === "approved" && c.patient_id).map((c) => <button type="button" className="doctor-patient" aria-pressed={patientId === c.patient_id} key={c.patient_id} disabled={recorder.recording || recorder.starting || busy} onClick={() => { if (patientId !== c.patient_id) { setImage(null); setSourceRunId(""); recorder.discard(); key.current = crypto.randomUUID(); } setPatientId(c.patient_id!); setOffset(0); setError(""); }}><span><strong>{c.name}</strong><small>{c.email}</small></span><span>{patientId === c.patient_id ? "Selected" : "Open chart"} →</span></button>)}</div>
+    </section>
+    {selectedPatient && <><section className="doctor-section"><div className="doctor-section-head"><div><h2>{selectedPatient.name}’s chart</h2><p className="lede">Patient-approved access</p></div><button className="secondary" type="button" disabled={busy} onClick={() => void disconnect(patientId)}>Disconnect</button></div>{records.length === 0 ? <p className="lede">There are no records on this page.</p> : <div className="doctor-patient-list">{records.map((record) => <button type="button" className="doctor-patient" key={record.run_id} onClick={() => navigate(`/doctor/records/${record.run_id}`)}><span><strong>{record.title}</strong><small>{new Date(record.created_at).toLocaleDateString()} · {record.document_type || "Report"} · {record.status}</small></span><span>Open →</span></button>)}</div>}<div className="row-actions">{offset > 0 && <button type="button" className="secondary" onClick={() => setOffset(Math.max(0, offset - 20))}>Previous</button>}{more && <button type="button" className="secondary" onClick={() => setOffset(offset + 20)}>Next</button>}</div></section>
+      <section className="doctor-section" key={patientId}><h2>Add a report and explanation</h2><p className="lede">The image and recording are sent to Meta for processing. Review the redaction and both language summaries before publishing.</p><form className="stack" onSubmit={(event) => void submit(event)}><label className="auth-field">Upload report image<input type="file" accept="image/*" onChange={(event) => { setImage(event.target.files?.[0] || null); setSourceRunId(""); key.current = crypto.randomUUID(); }} /></label>{records.some((r) => r.source_available) && <label className="auth-field">Or use an available report<select value={sourceRunId} disabled={!!image} onChange={(event) => { setSourceRunId(event.target.value); key.current = crypto.randomUUID(); }}><option value="">Choose a report</option>{records.filter((r) => r.source_available).map((r) => <option key={r.run_id} value={r.run_id}>{r.title} · {new Date(r.created_at).toLocaleDateString()}</option>)}</select></label>}<div><p>Voice explanation · up to 3 minutes</p><div className="row-actions">{!recorder.recording ? <button type="button" className="secondary" disabled={busy || recorder.starting} onClick={() => { key.current = crypto.randomUUID(); void recorder.start(); }}>{recorder.starting ? "Opening microphone…" : recorder.audio ? "Record again" : "Start recording"}</button> : <button type="button" className="secondary" onClick={recorder.stop}>Stop recording</button>}{recorder.audio && !recorder.recording && <button type="button" className="secondary" onClick={() => { recorder.discard(); key.current = crypto.randomUUID(); }}>Discard recording</button>}</div><p className="lede" aria-live="polite">{recorder.recording ? "Recording…" : recorder.audio ? "Recording ready." : "No recording yet."}</p></div><button className="primary" type="submit" disabled={busy || recorder.recording || recorder.starting || (!image && !sourceRunId) || !recorder.audio}>{busy ? "Submitting…" : "Continue to redaction"}</button></form></section></>}
+  </main>;
 
-  async function toggleRecord() {
-    if (!run) return;
-    if (recording) {
-      setRecording(false);
-      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(JSON.stringify({ type: "endStream" }));
-      socket.current?.close();
-      audioGear.current?.stream.getTracks().forEach((track) => track.stop());
-      void audioGear.current?.context.close();
-      audioGear.current = null;
-      const wav = wavFromPcm16(concatPcm(chunks.current));
-      setBusy(true);
-      try {
-        const updated = await dictate(run.run_id, wav);
-        if (live) setRun(updated);
-        else setShared(updated);
-      } catch (caught) {
-        setLocalError(caught instanceof Error ? caught.message : "The visit note was not saved");
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const context = new AudioContext();
-    audioGear.current = { context, stream };
-    await context.audioWorklet.addModule("/pcm16-worklet.js");
-    const source = context.createMediaStreamSource(stream);
-    const node = new AudioWorkletNode(context, "pcm16");
-    chunks.current = [];
-    node.port.onmessage = (message: MessageEvent<Float32Array>) => {
-      const pcm = downsample(message.data, context.sampleRate);
-      chunks.current.push(pcm);
-      if (socket.current?.readyState === WebSocket.OPEN) socket.current.send(pcm.buffer);
-    };
-    source.connect(node);
-    const protocol = location.protocol === "https:" ? "wss" : "ws";
-    const host = apiBase ? new URL(apiBase).host : location.host;
-    const ws = new WebSocket(`${protocol}://${host}/api/voice/stream`);
-    ws.binaryType = "arraybuffer";
-    ws.onmessage = (message) => {
-      if (typeof message.data !== "string") return;
-      try {
-        const body = JSON.parse(message.data) as { transcript?: string; text?: string };
-        const text = body.transcript || body.text;
-        if (text) setCaption(text);
-      } catch {
-        setCaption(message.data);
-      }
-    };
-    socket.current = ws;
-    setRecording(true);
-  }
-
-  const message = localError || error;
-  const ready = run && (run.status === "reviewing" || run.status === "approved" || run.status === "exported");
-
-  if (!run) {
-    return (
-      <main className="stage">
-        <button className="secondary" type="button" onClick={() => setScreen("start")}>
-          Back
-        </button>
-        <h1 style={{ marginTop: 24 }}>Open a record</h1>
-        <p className="lede">Use the six-character code from the patient, or add a report yourself.</p>
-        <form className="stack" onSubmit={(event) => void onOpenCode(event)}>
-          <input
-            aria-label="Patient code"
-            value={code}
-            onChange={(event) => setCode(event.target.value.toUpperCase())}
-            maxLength={6}
-            placeholder="ABC234"
-            style={{
-              fontFamily: '"Geist Mono", ui-monospace, monospace',
-              letterSpacing: "0.14em",
-              fontSize: 28,
-              background: "transparent",
-              border: 0,
-              borderBottom: "1px solid var(--line)",
-              padding: "8px 0",
-            }}
-          />
-          <button className="primary" type="submit" disabled={busy || code.trim().length < 6}>
-            Open code
-          </button>
-        </form>
-        <div className="stack" style={{ marginTop: 28 }}>
-          <label className="secondary">
-            Upload a report
-            <input
-              className="file-input"
-              type="file"
-              accept="image/*"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                const form = new FormData();
-                form.append("image", file);
-                void start(form);
-              }}
-            />
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={inject} onChange={(event) => setInject(event.target.checked)} />
-            Inject a fault. The first check fails on purpose, and the label stays visible.
-          </label>
-          {cases.map((item) => (
-            <button
-              key={item.id}
-              className="secondary"
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                const form = new FormData();
-                form.append("case_id", item.id);
-                void start(form);
-              }}
-            >
-              {item.title}
-            </button>
-          ))}
-        </div>
-        {message && <p className="banner pii">{message}</p>}
-      </main>
-    );
-  }
-
-  return (
-    <main className="workbench">
-      <section className="pane">
-        <h2>Source</h2>
-        <div className="sheet">
-          <img src={`${apiBase}${run.overlay_url}`} alt="Source page with hidden regions marked" />
-        </div>
-        {run.status === "awaiting_confirmation" && <div className="stack" style={{ marginTop: 16 }}><p className="lede">Red marks what will stay hidden. Confirm the overlay before the page is read.</p><button className="primary" type="button" disabled={busy} onClick={() => void onConfirm()}>Confirm redaction</button></div>}
-        <div className="row-actions">
-          <button className="secondary" type="button" onClick={() => setScreen("start")}>
-            Close
-          </button>
-          <button className="secondary drawer-toggle" type="button" onClick={() => setTraceOpen((open) => !open)}>
-            Trace
-          </button>
-          {ready && (
-            <button className="secondary" type="button" onClick={() => void toggleRecord()} disabled={busy}>
-              {recording ? <Stop size={16} /> : <Microphone size={16} />}
-              {recording ? "Stop and save" : "Dictate visit note"}
-            </button>
-          )}
-        </div>
-        {(caption || run.transcript) && <p className="lede">{caption || run.transcript}</p>}
-      </section>
-      <section className={`pane trace-pane${traceOpen ? " open" : ""}`}>
-        <h2>Trace</h2>
-        {events.length === 0 && <p className="lede">Stages appear here as they finish.</p>}
-        <ol className="trace">
-          {events.map((event) => (
-            <li key={event.seq}>
-              <span>{event.message}</span>
-              <small>
-                {event.stage}
-                {event.model ? ` · ${event.model}` : ""}
-              </small>
-            </li>
-          ))}
-        </ol>
-      </section>
-      <section className="pane">
-        <h2>Result</h2>
-        <div className="tabs">
-          <button className="tab" type="button" aria-selected={tab === "values"} onClick={() => setTab("values")}>
-            Values
-          </button>
-          <button className="tab" type="button" aria-selected={tab === "fhir"} onClick={() => setTab("fhir")}>
-            FHIR JSON
-          </button>
-        </div>
-        {run.replay && <p className="banner review">Recorded reading. No model produced these values.</p>}
-        {run.used_fallback && !run.replay && <p className="banner review">Assembled by fallback.</p>}
-        {run.extractor_model && <p className="lede">Read by {run.extractor_model}</p>}
-        {run.inject_fault && <p className="banner review">Inject a fault was on for this run.</p>}
-        {message && <p className="banner pii">{message}</p>}
-        {tab === "values" && run.extraction && (
-          <table>
-            <thead>
-              <tr>
-                <th>Printed name</th>
-                <th>Value</th>
-                <th>Code</th>
-              </tr>
-            </thead>
-            <tbody>
-              {run.extraction.rows.map((row, index) => {
-                const codeForRow = loincFor(run, row.raw_name);
-                return (
-                  <tr key={row.raw_name}>
-                    <td>{row.raw_name}</td>
-                    <td>
-                      <input
-                        aria-label={`${row.raw_name} value`}
-                        value={row.value ?? ""}
-                        onChange={(event) => editRow(index, event.target.value)}
-                      />
-                    </td>
-                    <td>{codeForRow ? <span className="badge ok">{codeForRow}</span> : row.unit}</td>
-                  </tr>
-                );
-              })}
-              {run.extraction.medications.map((item) => (
-                <tr key={item.raw_text}>
-                  <td colSpan={2}>{item.raw_text}</td>
-                  <td>
-                    <span className="badge review">as written</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {tab === "values" && run.extraction && run.extraction.advised_tests.length > 0 && (
-          <section aria-label="Advised tests">
-            <h3>Tests as written</h3>
-            <ul>{run.extraction.advised_tests.map((test, index) => <li key={`${test.raw_name}-${index}`}>{test.raw_name}</li>)}</ul>
-            <p className="lede">Review these transcriptions against the original. The approved export includes them as draft requests.</p>
-          </section>
-        )}
-        {tab === "values" && run.encounter && (
-          <label className="stack" style={{ marginTop: 16 }}>
-            Visit note
-            <textarea
-              value={run.encounter.note}
-              onChange={(event) => editNote(event.target.value)}
-              rows={3}
-              style={{ background: "transparent", border: "1px solid var(--line)", borderRadius: 12, padding: 10 }}
-            />
-          </label>
-        )}
-        {tab === "fhir" && <pre className="json">{JSON.stringify(run.bundle, null, 2)}</pre>}
-        {ready && (
-          <div className="row-actions">
-            <button className="primary" type="button" disabled={busy} onClick={() => void onApprove()}>
-              {run.status === "exported" ? "Exported" : "Approve and export"}
-            </button>
-            {run.status === "exported" && <span className="badge ok">Verified</span>}
-          </div>
-        )}
-        {!ready && <p className="lede">{events.at(-1)?.message ?? run.status}</p>}
-      </section>
-    </main>
-  );
+  const ready = ["reviewing", "approved", "exported"].includes(run.status);
+  return <main className="doctor-chart doctor-record">
+    <button className="back-link" type="button" onClick={() => navigate("/doctor")}>← Back to patients</button>
+    <div className="doctor-record-head"><div><p className="chart-eyebrow">RECORD REVIEW</p><h1>Review the reading.</h1><p className="lede">{run.pseudonym} · {run.status.replaceAll("_", " ")}</p></div><button className="secondary" type="button" onClick={() => window.location.reload()}>Refresh status</button></div>
+    {(error || runError) && <p className="banner pii" role="alert">{error || runError}</p>}{notice && <p className="banner review" role="status">{notice}</p>}
+    <div className="doctor-review-grid"><section><h2>Source report</h2>{imageMissing ? <p className="banner review">Source image unavailable. Render’s temporary storage may have been cleared.</p> : <div className="sheet"><img src={`${apiBase}${run.overlay_url}`} alt="Report with hidden regions marked in red" onError={() => setImageMissing(true)} /></div>}{run.status === "awaiting_confirmation" && <div className="stack"><p className="lede">Check that every private detail is covered in red before the report is read.</p><button className="primary" disabled={busy || imageMissing} onClick={() => void confirm()}>Confirm redaction</button></div>}</section>
+      <section><h2>Extracted reading</h2><p className="lede">Compare every detail with the source; the AI can miss or misread handwriting.</p>{run.extraction ? <><table><thead><tr><th>As written</th><th>Value</th></tr></thead><tbody>{run.extraction.rows.map((row, i) => <tr key={i}><td>{row.raw_name}</td><td>{row.value !== null || !row.value_text ? <input aria-label={`${row.raw_name} value`} type="number" step="any" value={row.value ?? ""} disabled={run.status === "approved" || run.status === "exported"} onChange={(e) => editLabValue(i, e.target.value)} /> : row.value_text} {row.unit ?? ""}</td></tr>)}{run.extraction.medications.map((item, i) => <tr key={i}><td colSpan={2}>{item.raw_text}</td></tr>)}</tbody></table>{run.extraction.advised_tests.length > 0 && <><h3>Tests as written</h3><ul>{run.extraction.advised_tests.map((test, i) => <li key={i}>{test.raw_name}</li>)}</ul><p className="lede">The approved export includes them as draft requests.</p></>}</> : <p className="lede">{events.at(-1)?.message || "The reading will appear here when it is ready."}</p>}{ready && run.encounter && <div className="row-actions"><button type="button" className="secondary" disabled={busy || run.status === "approved"} onClick={() => void approve()}>Approve FHIR</button>{run.status === "approved" && run.bundle && <button type="button" className="secondary" onClick={download}>Download approved FHIR</button>}</div>}</section></div>
+    {draft && <section className="doctor-section"><p className="chart-eyebrow">DOCTOR REVIEW</p><h2>Review both languages</h2><p className="lede">The patient will see this only after you verify and publish it. Check the transcript, names, numbers, doses and clinical statements against the original.</p><label className="auth-field">Voice transcript<textarea value={draft.transcript} onChange={(e) => { setAcknowledged(false); setDraft({ ...draft, transcript: e.target.value }); }} rows={5} /></label>{issues(draft.unresolved).length > 0 && <div className="banner review"><strong>Items to resolve</strong><ul>{issues(draft.unresolved).map((item, i) => <li key={i}>{item}</li>)}</ul></div>}<div className="doctor-review-grid"><label className="auth-field">English summary<textarea value={draft.summary_en} onChange={(e) => { setAcknowledged(false); setDraft({ ...draft, summary_en: e.target.value }); }} rows={9} /></label><label className="auth-field">বাংলা সারাংশ<textarea lang="bn" value={draft.summary_bn} onChange={(e) => { setAcknowledged(false); setDraft({ ...draft, summary_bn: e.target.value }); }} rows={9} /></label></div><label className="check"><input type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />I reviewed the transcript, both summaries, and any unresolved details.</label><div className="row-actions"><button type="button" className="secondary" disabled={busy} onClick={() => void save(false)}>Save draft</button><button type="button" className="primary" disabled={busy || !acknowledged || !draft.summary_en.trim() || !draft.summary_bn.trim() || !draft.transcript.trim()} onClick={() => void save(true)}>Verify and publish</button></div></section>}
+    {summaries.filter((entry) => entry.status === "published").map((entry) => <section className="doctor-section" key={entry.id}><h2>Published summary</h2><p className="lede">Doctor reviewed · {entry.published_at ? new Date(entry.published_at).toLocaleString() : "Published"}</p><div className="doctor-review-grid"><div><h3>English</h3><p className="doctor-summary">{entry.summary_en}</p></div><div lang="bn"><h3>বাংলা</h3><p className="doctor-summary">{entry.summary_bn}</p></div></div></section>)}
+  </main>;
 }

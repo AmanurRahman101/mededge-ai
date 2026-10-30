@@ -9,7 +9,7 @@ from starlette.websockets import WebSocketDisconnect
 from app.auth.security import digest
 from app.config import Settings
 from app.main import create_app
-from app.store.db import AuthSession, AuthUser, RunGrant, RunRow
+from app.store.db import AuthSession, AuthUser, ChartConnection, RunRow
 
 
 @pytest.fixture
@@ -87,8 +87,11 @@ def test_doctor_approval_preserves_advised_tests_in_export_bundle(access_client)
     )
     with client.app.state.db.session() as session:
         session.add(
-            RunGrant(
-                run_id="record", user_id="doctor", expires_at=datetime.now(UTC) + timedelta(hours=1)
+            ChartConnection(
+                patient_id="patient1",
+                doctor_id="doctor",
+                status="approved",
+                requested_at=datetime.now(UTC),
             )
         )
         session.commit()
@@ -175,62 +178,13 @@ def test_record_files_and_events_require_authorization(access_client):
     assert client.post("/api/runs/record/approve", json={}).status_code == 403
 
 
-def test_share_redemption_is_doctor_only_and_grant_expires(access_client):
-    client = access_client
-    sign_in(client, "patient2")
-    assert client.post("/api/share/redeem", json={"code": "ABC234"}).status_code == 403
-    sign_in(client, "doctor")
-    assert client.get("/api/runs/record").status_code == 404
-    response = client.post("/api/share/redeem", json={"code": "abc234"})
-    assert response.status_code == 200
-    assert response.json()["run_id"] == "record"
-    assert client.get("/api/runs/record/files/overlay.png").status_code == 200
-    with client.app.state.db.session() as session:
-        grant = session.get(RunGrant, ("record", "doctor"))
-        grant.expires_at = datetime.now(UTC) - timedelta(seconds=1)
-        session.add(grant)
-        session.commit()
-    assert client.get("/api/runs/record").status_code == 404
-    assert client.get("/api/runs/record/files/overlay.png").status_code == 404
-
-
-def test_expired_share_code_rotates_instead_of_reactivating(access_client, monkeypatch):
+def test_legacy_record_share_cannot_bypass_patient_consent(access_client):
     client = access_client
     sign_in(client, "patient1")
-    with client.app.state.db.session() as session:
-        row = session.get(RunRow, "record")
-        row.share_expires = datetime.now(UTC) - timedelta(seconds=1)
-        session.add(row)
-        session.commit()
-    monkeypatch.setattr("app.api.runs.share_code", lambda: "NEW234")
-    response = client.post("/api/runs/record/share")
-    assert response.status_code == 200
-    assert response.json()["code"] == "NEW234"
+    assert client.post("/api/runs/record/share").status_code == 410
     sign_in(client, "doctor")
-    assert client.post("/api/share/redeem", json={"code": "ABC234"}).status_code == 404
-    assert client.post("/api/share/redeem", json={"code": "NEW234"}).status_code == 200
-
-
-def test_share_code_collision_is_retried(access_client, monkeypatch):
-    client = access_client
-    sign_in(client, "patient1")
-    with client.app.state.db.session() as session:
-        session.add(
-            RunRow(
-                id="second",
-                status="reviewing",
-                created_at=datetime.now(UTC),
-                pseudonym="PT-B",
-                owner_id="patient1",
-            )
-        )
-        session.commit()
-    codes = iter(["ABC234", "XYZ234"])
-    monkeypatch.setattr("app.api.runs.share_code", lambda: next(codes))
-    response = client.post("/api/runs/second/share")
-    assert response.status_code == 200
-    assert response.json()["code"] == "XYZ234"
-    assert client.app.state.db.get("record").share_code == "ABC234"
+    assert client.post("/api/share/redeem", json={"code": "ABC234"}).status_code == 410
+    assert client.get("/api/runs/record").status_code == 404
 
 
 def test_voice_websocket_rejects_unauthenticated_or_wrong_origin(access_client):

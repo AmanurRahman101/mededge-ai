@@ -12,6 +12,8 @@ router = APIRouter()
 
 @router.websocket("/api/voice/stream")
 async def voice_stream(websocket: WebSocket) -> None:
+    await websocket.close(code=1008)
+    return
     settings = websocket.app.state.settings
     allowed_origins = {settings.app_base_url.rstrip("/")}
     if settings.app_env != "production":

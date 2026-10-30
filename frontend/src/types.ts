@@ -69,3 +69,16 @@ export interface SampleCase {
   kind: string;
   summary: string;
 }
+
+export interface ClinicalSummary {
+  id: string;
+  author_id: string;
+  author_name?: string | null;
+  transcript: string;
+  summary_en: string;
+  summary_bn: string;
+  unresolved: string | string[];
+  status: string;
+  created_at: string;
+  published_at: string | null;
+}

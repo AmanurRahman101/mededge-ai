@@ -30,9 +30,13 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function post<T>(path: string, body?: unknown): Promise<T> {
+export function post<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
 }
+
+export const getChart = <T,>(path: string) => request<T>(`/api/chart${path}`);
+export const updateChart = <T,>(path: string, body: unknown) => request<T>(`/api/chart${path}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+export const deleteChart = <T,>(path: string) => request<T>(`/api/chart${path}`, { method: "DELETE" });
 
 export type UserRole = "patient" | "doctor";
 export interface User { id: string; full_name: string; email: string; role: UserRole; verified: boolean }

@@ -36,6 +36,13 @@ class Extraction(BaseModel):
     advised_tests: list[AdvisedTest] = Field(default_factory=list)
 
 
+class ConsultationDraft(BaseModel):
+    extraction: Extraction
+    summary_en: str
+    summary_bn: str
+    unresolved: list[str] = Field(default_factory=list)
+
+
 class EncounterFields(BaseModel):
     status: Literal[
         "planned", "arrived", "triaged", "in-progress", "onleave", "finished", "cancelled"

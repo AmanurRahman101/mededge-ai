@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import delete, func, inspect, text
+from sqlalchemy import UniqueConstraint, delete, func, inspect, text
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from app.config import Settings
@@ -10,6 +10,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
 class RunRow(SQLModel, table=True):
+    __table_args__ = (UniqueConstraint("submitted_by", "submission_key", name="uq_run_submission"),)
     id: str = Field(primary_key=True)
     status: str
     created_at: datetime
@@ -26,6 +27,62 @@ class RunRow(SQLModel, table=True):
     inject_fault: bool = False
     share_code: str | None = Field(default=None, unique=True, index=True)
     share_expires: datetime | None = None
+    title: str = "Report"
+    submitted_by: str | None = Field(default=None, index=True)
+    submission_key: str | None = None
+    submission_digest: str | None = None
+    archived: bool = False
+
+
+class ChartConnection(SQLModel, table=True):
+    patient_id: str = Field(primary_key=True, foreign_key="authuser.id")
+    doctor_id: str = Field(primary_key=True, foreign_key="authuser.id")
+    status: str = "pending"
+    requested_at: datetime
+    decided_at: datetime | None = None
+    consent_version: str | None = None
+    request_id: str | None = Field(default=None, index=True, unique=True)
+
+
+class ConnectionCode(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    patient_id: str = Field(index=True, foreign_key="authuser.id")
+    expires_at: datetime
+    consumed_at: datetime | None = None
+
+
+class ChartActivity(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    patient_id: str = Field(index=True, foreign_key="authuser.id")
+    actor_id: str = Field(foreign_key="authuser.id")
+    action: str
+    occurred_at: datetime
+    run_id: str | None = Field(default=None, index=True)
+
+
+class ConsentEvent(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    patient_id: str = Field(index=True, foreign_key="authuser.id")
+    doctor_id: str = Field(index=True, foreign_key="authuser.id")
+    actor_id: str = Field(foreign_key="authuser.id")
+    action: str
+    version: str
+    scope: str
+    consent_text: str
+    occurred_at: datetime
+
+
+class ClinicalSummary(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    run_id: str = Field(index=True, foreign_key="runrow.id")
+    author_id: str = Field(foreign_key="authuser.id")
+    transcript: str
+    summary_en: str
+    summary_bn: str
+    unresolved: str = ""
+    status: str = "draft"
+    created_at: datetime
+    published_at: datetime | None = None
 
 
 class SpendRow(SQLModel, table=True):

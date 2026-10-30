@@ -9,9 +9,11 @@ const fixture = { status: "reviewing", pseudonym: "TEST", extraction: { rows: []
 const plugin = {
   name: "test-workspace",
   setup(build) {
+    build.onResolve({ filter: /\.css$/ }, args => ({ path: args.path, namespace: "fixture" }));
     build.onResolve({ filter: /^@phosphor-icons\/react$/ }, () => ({ path: "icons", namespace: "fixture" }));
     build.onResolve({ filter: /^\.\/(store|useRun|api)$/ }, args => ({ path: args.path, namespace: "fixture" }));
     build.onLoad({ filter: /.*/, namespace: "fixture" }, args => {
+      if (args.path.endsWith(".css")) return { contents: "", loader: "js" };
       if (args.path === "icons") return { contents: "exports.Microphone = () => null; exports.Stop = () => null;", loader: "js" };
       if (args.path === "./store") return { contents: "exports.useApp = selector => selector({ setScreen() {} });", loader: "js" };
       if (args.path === "./useRun") return { contents: `exports.useRun = () => ({run: ${JSON.stringify(fixture)}, events: [], error: null});`, loader: "js" };

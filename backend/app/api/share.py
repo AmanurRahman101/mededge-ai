@@ -18,6 +18,7 @@ class RedeemBody(BaseModel):
 @router.post("/api/share/redeem")
 @limiter.limit("5/minute")
 async def redeem_share(request: Request, body: RedeemBody) -> dict:
+    raise HTTPException(status_code=410, detail="Use patient-approved chart connections instead.")
     user = require_role(request, "doctor")
     throttle(request, "share-ip", client_key(request), 5, 60)
     throttle(request, "share-user", user.id, 20, 3600)

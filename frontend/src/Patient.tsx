@@ -1,20 +1,20 @@
 import { useEffect, useState } from "react";
-import QRCode from "qrcode";
-
-import { apiBase, confirmRun, createRun, listCases, shareRun } from "./api";
+import { apiBase, confirmRun, createRun, getChart, listCases } from "./api";
 import { useApp } from "./store";
-import type { SampleCase } from "./types";
+import type { ClinicalSummary, SampleCase } from "./types";
 import { useRun } from "./useRun";
+import { navigate } from "./navigation";
 
-export function Patient() {
+export function Patient({ initialRunId = null }: { initialRunId?: string | null }) {
   const setScreen = useApp((state) => state.setScreen);
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(initialRunId);
   const [cases, setCases] = useState<SampleCase[]>([]);
   const [showSamples, setShowSamples] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [code, setCode] = useState<string | null>(null);
-  const [qr, setQr] = useState<string>("");
+  const [summaries, setSummaries] = useState<ClinicalSummary[]>([]);
+  const [summaryError, setSummaryError] = useState("");
+  const [imageUnavailable, setImageUnavailable] = useState(false);
   const { run, events, error } = useRun(runId);
 
   useEffect(() => {
@@ -24,17 +24,21 @@ export function Patient() {
   }, []);
 
   useEffect(() => {
-    if (!code) return;
-    void QRCode.toString(code, { type: "svg", margin: 1, width: 180 }).then(setQr);
-  }, [code]);
+    if (!runId) return;
+    let active = true;
+    void getChart<{ summaries: ClinicalSummary[] }>(`/records/${encodeURIComponent(runId)}/summaries`)
+      .then((result) => { if (active) { setSummaries(result.summaries); setSummaryError(""); } })
+      .catch(() => { if (active) setSummaryError("Could not load your doctor’s notes. Refresh to try again."); });
+    return () => { active = false; };
+  }, [runId, run?.status]);
 
   async function start(form: FormData) {
     setBusy(true);
     setLocalError(null);
-    setCode(null);
     try {
       const created = await createRun(form);
       setRunId(created.run_id);
+      navigate(`/patient/records/${created.run_id}`);
     } catch (caught) {
       setLocalError(caught instanceof Error ? caught.message : "The upload failed");
     } finally {
@@ -67,31 +71,19 @@ export function Patient() {
     }
   }
 
-  async function onShare() {
-    if (!runId) return;
-    setBusy(true);
-    try {
-      setCode(await shareRun(runId));
-    } catch (caught) {
-      setLocalError(caught instanceof Error ? caught.message : "Sharing failed");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const waiting = run?.status === "awaiting_confirmation";
   const ready = run?.status === "reviewing" || run?.status === "approved" || run?.status === "exported";
   const message = localError || error;
 
   return (
     <main className="stage">
-      <button className="secondary" type="button" onClick={() => setScreen("start")}>
-        Back
+      <button className="secondary" type="button" onClick={() => initialRunId ? navigate("/patient") : setScreen("patient")}>
+        Back to my records
       </button>
-      <h1 style={{ marginTop: 24 }}>Add a report</h1>
-      <p className="lede">
+      <h1 style={{ marginTop: 24 }}>{runId ? "Your report" : "Add a report"}</h1>
+      {!runId && <p className="lede">
         Your image is sent to Meta to locate page regions. Review the redaction preview before the redacted page is sent for reading.
-      </p>
+      </p>}
 
       {!runId && (
         <div className="stack">
@@ -118,6 +110,7 @@ export function Patient() {
       )}
 
       {message && <p className="banner pii">{message}</p>}
+      {summaryError && <p className="banner pii" role="alert">{summaryError}</p>}
 
       {run && waiting && (
         <div className="stack">
@@ -135,11 +128,14 @@ export function Patient() {
 
       {run && ready && run.extraction && (
         <div className="stack">
+          <section className="source-preview"><h2>Source preview</h2>
+            {imageUnavailable ? <p className="lede">Source image unavailable. Your saved reading remains below.</p> : <img src={`${apiBase}${run.redacted_url}`} alt="Redacted source report" onError={() => setImageUnavailable(true)} />}
+          </section>
           {run.replay && (
             <p className="banner review">Recorded reading of a fictional sample. No model was called for the values.</p>
           )}
           {run.extractor_model && <p className="lede">Read by {run.extractor_model}</p>}
-          <p className="lede">Session {run.pseudonym}. Values are copied as printed.</p>
+          <p className="lede">Session {run.pseudonym}. {run.replay ? "Fictional recorded reading." : "AI-extracted reading; review against the source."}</p>
           <table>
             <thead>
               <tr>
@@ -174,16 +170,15 @@ export function Patient() {
             </section>
           )}
           {!run.replay && <p className="banner review">AI readings can miss or misread details. Check the original with a clinician before using this result.</p>}
-          <button className="primary" type="button" disabled={busy} onClick={() => void onShare()}>
-            Share with a doctor
+          {summaries.filter(item => item.status === "published").map(item => <article className="published-note" key={item.id}>
+            <p className="chart-eyebrow">DOCTOR-REVIEWED NOTE</p><h2>What your doctor shared</h2>
+            <p className="lede">{item.author_name || "Doctor"} · {new Date(item.published_at || item.created_at).toLocaleDateString()} · Doctor account is self-declared</p>
+            <h3>English</h3><p className="note-text">{item.summary_en}</p><h3 lang="bn">বাংলা</h3><p className="note-text" lang="bn">{item.summary_bn}</p>
+            <button className="secondary" type="button" onClick={() => window.print()}>Print or save as PDF</button>
+          </article>)}
+          <button className="primary" type="button" disabled={busy} onClick={() => navigate("/patient")}>
+            Manage doctor access
           </button>
-          {code && (
-            <div className="stack">
-              <p className="code">{code}</p>
-              <p className="lede">The code expires in 24 hours.</p>
-              {qr && <div className="sheet" style={{ width: 196, padding: 8 }} dangerouslySetInnerHTML={{ __html: qr }} />}
-            </div>
-          )}
         </div>
       )}
     </main>

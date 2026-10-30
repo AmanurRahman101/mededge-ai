@@ -7,15 +7,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy import update
 
-from app.api import auth, cases, dev, health, runs, share, voice
+from app.api import auth, cases, chart, dev, health, runs, share, voice
 from app.auth.security import verify_request
 from app.config import REPO_ROOT, Settings, get_settings
 from app.events import EventBus
 from app.limit import limiter
 from app.models.router import ModelRouter
 from app.pipeline.orchestrator import Orchestrator
-from app.store.db import Database
+from app.store.db import Database, RunRow
 
 
 @asynccontextmanager
@@ -46,7 +47,14 @@ async def lifespan(app: FastAPI):
         app.state.http = http
         app.state.router = ModelRouter(settings, http)
         app.state.db = Database(settings)
-        app.state.db.purge()
+        # In-process jobs and confirmation gates do not survive a restart.
+        with app.state.db.session() as session:
+            session.exec(
+                update(RunRow)
+                .where(RunRow.status.in_(["queued", "awaiting_confirmation", "processing"]))
+                .values(status="interrupted")
+            )
+            session.commit()
         app.state.orchestrator = Orchestrator(
             settings, http, app.state.router, app.state.bus, app.state.db
         )
@@ -95,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(auth.router)
+    app.include_router(chart.router)
     app.include_router(runs.router)
     app.include_router(cases.router)
     app.include_router(share.router)

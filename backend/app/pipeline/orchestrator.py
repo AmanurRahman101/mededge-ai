@@ -6,6 +6,7 @@ import secrets
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import httpx
 from PIL import Image
@@ -19,13 +20,13 @@ from app.pipeline.agent.prompts import ENCOUNTER_INSTRUCTIONS, EXTRACT_INSTRUCTI
 from app.pipeline.fallback_assembler import assemble
 from app.pipeline.ocr_anchors import identifier_boxes, read_text_boxes
 from app.pipeline.redact import redact
-from app.pipeline.schemas import EncounterFields, Extraction
+from app.pipeline.schemas import ConsultationDraft, EncounterFields, Extraction
 from app.pipeline.segment import segment_page
 from app.pipeline.terminology import search_loinc, search_rxterms
 from app.pipeline.transcribe import transcribe_wav
 from app.pipeline.units import normalize_unit
 from app.pipeline.verify import verify
-from app.store.db import Database
+from app.store.db import ChartConnection, ClinicalSummary, Database
 
 SHARE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 SAM_CALL_USD = 0.01
@@ -79,6 +80,33 @@ class Orchestrator:
         self.bus = bus
         self.db = db
         self.gates: dict[str, asyncio.Event] = {}
+        self.image_gate = asyncio.Semaphore(1)
+        self.active_runs: dict[str, tuple[str, str, asyncio.Task]] = {}
+        self.event_loop: asyncio.AbstractEventLoop | None = None
+
+    def register_task(self, run_id: str, owner_id: str, actor_id: str, task: asyncio.Task) -> None:
+        self.event_loop = asyncio.get_running_loop()
+        self.active_runs[run_id] = (owner_id, actor_id, task)
+        task.add_done_callback(lambda _: self.active_runs.pop(run_id, None))
+
+    def cancel_connection(self, patient_id: str, doctor_id: str) -> None:
+        # Revocation can run in a threadpool; cancel tasks on their event loop.
+        if self.event_loop is None:
+            return
+        for owner, actor, task in list(self.active_runs.values()):
+            if owner == patient_id and actor == doctor_id and not task.done():
+                self.event_loop.call_soon_threadsafe(task.cancel)
+
+    def _check_consent(self, ctx: RunContext) -> None:
+        """Reject deleted submissions and revoked doctor connections before each provider call."""
+        row = self.db.get(ctx.run_id)
+        if row is None or row.owner_id is None:
+            raise PermissionError("This submission is no longer available.")
+        if row.submitted_by and row.owner_id != row.submitted_by:
+            with self.db.session() as session:
+                connection = session.get(ChartConnection, (row.owner_id, row.submitted_by))
+                if not connection or connection.status != "approved":
+                    raise PermissionError("Patient access was revoked.")
 
     def confirm(self, run_id: str) -> bool:
         gate = self.gates.get(run_id)
@@ -91,10 +119,29 @@ class Orchestrator:
         run_id = ctx.run_id
         try:
             await self._execute(ctx)
+        except asyncio.CancelledError:
+            self.db.update(run_id, status="interrupted")
+            if self.bus.exists(run_id):
+                self.bus.publish(
+                    run_id, Stage.SYSTEM, EventKind.ERROR, "Processing was interrupted."
+                )
+            raise
         except Exception as exc:  # noqa: BLE001 - the run must close even when a stage crashes
-            self.bus.publish(run_id, Stage.SYSTEM, EventKind.ERROR, f"Run failed: {exc}")
+            if isinstance(exc, PermissionError):
+                message = "Patient access was revoked or the record is no longer available."
+            elif isinstance(exc, ValueError):
+                message = (
+                    str(exc)
+                    if str(exc).startswith(("Image is too large", "No speech"))
+                    else "Invalid input. Please check the report and recording."
+                )
+            else:
+                message = "Processing failed. Please try again."
+            self.bus.publish(run_id, Stage.SYSTEM, EventKind.ERROR, message)
             self.db.update(run_id, status="failed")
         finally:
+            ctx.audio = None
+            ctx.image = b""
             self.gates.pop(run_id, None)
             if self.bus.exists(run_id):
                 self.bus.close(run_id)
@@ -124,59 +171,66 @@ class Orchestrator:
             self.db.update(run_id, status="failed", replay=True)
             return
 
-        # Reject large photos rather than silently reducing detail or exhausting the host.
-        validate_image_size(ctx.image)
-        image = ImagePart(ctx.image, ctx.mime)
-        self.bus.publish(
-            run_id,
-            Stage.SEGMENT,
-            EventKind.STARTED,
-            "Finding page regions",
-            model=self.settings.sam_model,
-        )
-        try:
-            regions = await segment_page(self.http, self.settings, image)
-            self.db.add_spend(SAM_CALL_USD * 7)
-        except (ProviderError, NotImplementedError) as exc:
-            regions = {name: [] for name in ("sheet of paper", "table")}
-            self.bus.publish(
-                run_id, Stage.SEGMENT, EventKind.WARNING, f"Segmentation skipped: {exc}"
-            )
-        else:
-            counts = ", ".join(f"{name} {len(boxes)}" for name, boxes in regions.items() if boxes)
+        async with self.image_gate:
+            self._check_consent(ctx)
+            # Reject large photos rather than silently reducing detail or exhausting the host.
+            validate_image_size(ctx.image)
+            image = ImagePart(ctx.image, ctx.mime)
             self.bus.publish(
                 run_id,
                 Stage.SEGMENT,
-                EventKind.COMPLETED,
-                counts or "No regions matched",
+                EventKind.STARTED,
+                "Finding page regions",
                 model=self.settings.sam_model,
             )
+            try:
+                regions = await segment_page(self.http, self.settings, image)
+                self.db.add_spend(SAM_CALL_USD * 7)
+            except (ProviderError, NotImplementedError):
+                regions = {name: [] for name in ("sheet of paper", "table")}
+                self.bus.publish(
+                    run_id,
+                    Stage.SEGMENT,
+                    EventKind.WARNING,
+                    "Segmentation unavailable. Review redaction carefully.",
+                )
+            else:
+                counts = ", ".join(
+                    f"{name} {len(boxes)}" for name, boxes in regions.items() if boxes
+                )
+                self.bus.publish(
+                    run_id,
+                    Stage.SEGMENT,
+                    EventKind.COMPLETED,
+                    counts or "No regions matched",
+                    model=self.settings.sam_model,
+                )
 
-        import cv2
-        import numpy as np
+            import cv2
+            import numpy as np
 
-        decoded = cv2.imdecode(np.frombuffer(ctx.image, dtype=np.uint8), cv2.IMREAD_COLOR)
-        anchors = identifier_boxes(read_text_boxes(decoded)) if decoded is not None else []
-        del decoded
-        result = redact(ctx.image, regions, anchors)
-        folder = self.db.runs_dir / run_id
-        folder.mkdir(parents=True, exist_ok=True)
-        (folder / "redacted.png").write_bytes(result.redacted_png)
-        (folder / "overlay.png").write_bytes(result.overlay_png)
-        if result.table_png:
-            (folder / "table.png").write_bytes(result.table_png)
-        self.bus.publish(
-            run_id,
-            Stage.REDACT,
-            EventKind.COMPLETED,
-            f"Hid {len(result.hidden_boxes)} region(s). Confirm before the page is read.",
-            data={
-                "overlay_url": f"/api/runs/{run_id}/files/overlay.png",
-                "redacted_url": f"/api/runs/{run_id}/files/redacted.png",
-                "hidden": len(result.hidden_boxes),
-            },
-        )
-        self.db.update(run_id, status="awaiting_confirmation")
+            decoded = cv2.imdecode(np.frombuffer(ctx.image, dtype=np.uint8), cv2.IMREAD_COLOR)
+            anchors = identifier_boxes(read_text_boxes(decoded)) if decoded is not None else []
+            del decoded
+            result = redact(ctx.image, regions, anchors)
+            folder = self.db.runs_dir / run_id
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "redacted.png").write_bytes(result.redacted_png)
+            (folder / "overlay.png").write_bytes(result.overlay_png)
+            if result.table_png:
+                (folder / "table.png").write_bytes(result.table_png)
+            self.db.update(run_id, status="awaiting_confirmation")
+            self.bus.publish(
+                run_id,
+                Stage.REDACT,
+                EventKind.COMPLETED,
+                f"Hid {len(result.hidden_boxes)} region(s). Confirm before the page is read.",
+                data={
+                    "overlay_url": f"/api/runs/{run_id}/files/overlay.png",
+                    "redacted_url": f"/api/runs/{run_id}/files/redacted.png",
+                    "hidden": len(result.hidden_boxes),
+                },
+            )
         if ctx.auto_confirm:
             self.bus.publish(
                 run_id, Stage.REDACT, EventKind.PROGRESS, "Sample case confirmed automatically"
@@ -189,6 +243,85 @@ class Orchestrator:
                 self.bus.publish(run_id, Stage.REDACT, EventKind.ERROR, "Confirmation timed out")
                 self.db.update(run_id, status="failed")
                 return
+
+        self._check_consent(ctx)
+        self.db.update(run_id, status="processing")
+        self.bus.publish(run_id, Stage.REDACT, EventKind.COMPLETED, "Redaction confirmed")
+
+        row = self.db.get(run_id)
+        if row and row.submitted_by and row.owner_id != row.submitted_by and ctx.audio:
+            self._check_consent(ctx)
+            voice = await transcribe_wav(self.http, self.settings, ctx.audio)
+            ctx.audio = None
+            self.db.add_spend(VOICE_USD)
+            transcript = str(voice.get("transcript") or "").strip()
+            if not transcript:
+                raise ValueError("No speech detected; submit the recording again.")
+            self._check_consent(ctx)
+            combined = await self.router.structured(
+                "extractor",
+                instructions=(
+                    "Read the redacted report and the doctor's transcript. Produce English and "
+                    "Bengali drafts grounded only in those sources. Preserve names, numbers, "
+                    "units, and dose strings; identify conflicts and uncertain or unreadable "
+                    "details in unresolved. Clearly attribute spoken assessments to the doctor. "
+                    "Do not invent diagnoses or treatment. Both summaries require doctor review."
+                ),
+                parts=[
+                    TextPart("Doctor transcript: " + transcript),
+                    ImagePart(result.redacted_png, "image/png"),
+                ],
+                schema=ConsultationDraft,
+            )
+            self.db.add_spend(EXTRACT_USD)
+            self._check_consent(ctx)
+            extraction = combined.value.extraction
+            extraction.rows = [item for item in extraction.rows if not item.contains_identifier]
+            extraction.medications = [
+                item for item in extraction.medications if not item.contains_identifier
+            ]
+            encounter = EncounterFields()
+            bundle = assemble(extraction, encounter, row.pseudonym, {})
+            report = verify(bundle, extraction, set(), set())
+            with self.db.session() as session:
+                from sqlmodel import select
+
+                connection = session.exec(
+                    select(ChartConnection)
+                    .where(
+                        ChartConnection.patient_id == row.owner_id,
+                        ChartConnection.doctor_id == row.submitted_by,
+                    )
+                    .with_for_update()
+                ).first()
+                current = session.get(type(row), run_id)
+                if not connection or connection.status != "approved" or current is None:
+                    return
+                session.add(
+                    ClinicalSummary(
+                        id=uuid.uuid4().hex,
+                        run_id=run_id,
+                        author_id=row.submitted_by,
+                        transcript=transcript,
+                        summary_en=combined.value.summary_en,
+                        summary_bn=combined.value.summary_bn,
+                        unresolved=json.dumps(combined.value.unresolved),
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                current.extraction_json = extraction.model_dump_json()
+                current.document_type = extraction.document_type
+                current.encounter_json = encounter.model_dump_json()
+                current.bundle_json = json.dumps(bundle) if report.ok else None
+                current.used_fallback = True
+                current.extractor_model = str(combined.target)
+                current.status = "reviewing"
+                session.add(current)
+                session.commit()
+            self.bus.publish(
+                run_id, Stage.EXTRACT, EventKind.COMPLETED, "Draft ready for doctor review"
+            )
+            return
 
         crop = result.table_png or result.redacted_png
         self.bus.publish(run_id, Stage.EXTRACT, EventKind.STARTED, "Reading the redacted page")

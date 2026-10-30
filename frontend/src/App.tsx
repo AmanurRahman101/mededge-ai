@@ -6,6 +6,7 @@ import { AuthPage, AccountPage } from "./Auth";
 import { DemoPage } from "./Demo";
 import { Doctor } from "./Doctor";
 import { Patient } from "./Patient";
+import { PatientChart } from "./Chart";
 import { Start } from "./Start";
 import { navigate } from "./navigation";
 import { useApp } from "./store";
@@ -36,10 +37,12 @@ export function App() {
   }, []);
   useEffect(() => {
     if (checking || connectionError) return;
-    if (["/patient", "/doctor", "/account"].includes(path) && !user) {
-      const role = path === "/patient" || path === "/doctor" ? `?role=${path.slice(1)}` : "";
+    const patientPath = path === "/patient" || path.startsWith("/patient/");
+    const doctorPath = path === "/doctor" || path.startsWith("/doctor/");
+    if ((patientPath || doctorPath || path === "/account") && !user) {
+      const role = patientPath ? "?role=patient" : doctorPath ? "?role=doctor" : "";
       navigate(`/signin${role}`, true);
-    } else if ((path === "/patient" || path === "/doctor") && user && path !== `/${user.role}`) {
+    } else if (((patientPath && user?.role !== "patient") || (doctorPath && user?.role !== "doctor")) && user) {
       navigate(`/${user.role}`, true);
     }
   }, [checking, connectionError, path, user]);
@@ -48,7 +51,9 @@ export function App() {
     try { await logout(); setUser(null); navigate("/"); }
     catch (error) { setConnectionError(error instanceof Error ? error.message : "Sign out failed. Please try again."); }
   }
-  const protectedPath = path === "/patient" || path === "/doctor" || path === "/account";
+  const patientPath = path === "/patient" || path.startsWith("/patient/");
+  const doctorPath = path === "/doctor" || path.startsWith("/doctor/");
+  const protectedPath = patientPath || doctorPath || path === "/account";
   return (
     <div className="app">
       <header className="topbar">
@@ -59,8 +64,8 @@ export function App() {
         </nav>
       </header>
       {checking ? <main className="stage loading-stage" aria-live="polite"><span className="loading-dot" /> Connecting to MedEdge…</main> : connectionError ? <main className="stage"><h1>We couldn’t connect.</h1><p className="lede">{connectionError}</p><button className="secondary" type="button" onClick={() => void bootstrap()}>Try again</button></main> :
-        protectedPath && (!user || (path !== "/account" && path !== `/${user.role}`)) ? <main className="stage" aria-live="polite">Opening your workspace…</main> :
-        path === "/patient" ? <Patient /> : path === "/doctor" ? <Doctor /> : path === "/account" ? <AccountPage /> : path === "/demo" ? <DemoPage /> : ["/signin", "/signup", "/verify-email", "/forgot-password", "/reset-password", "/check-email"].includes(path) ? <AuthPage key={path} path={path} /> : <Start />}
+        protectedPath && (!user || (patientPath && user.role !== "patient") || (doctorPath && user.role !== "doctor")) ? <main className="stage" aria-live="polite">Opening your workspace…</main> :
+        path === "/patient" ? <PatientChart /> : path === "/patient/upload" ? <Patient key={path} /> : path.startsWith("/patient/records/") ? <Patient key={path} initialRunId={path.split("/")[3]} /> : doctorPath ? <Doctor key={path} initialRunId={path.startsWith("/doctor/records/") ? path.split("/")[3] : null} /> : path === "/account" ? <AccountPage /> : path === "/demo" ? <DemoPage /> : ["/signin", "/signup", "/verify-email", "/forgot-password", "/reset-password", "/check-email"].includes(path) ? <AuthPage key={path} path={path} /> : <Start />}
       <footer className="footer">{DISCLAIMER}</footer>
     </div>
   );
