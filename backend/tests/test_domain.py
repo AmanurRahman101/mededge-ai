@@ -74,13 +74,11 @@ def test_redaction_blurs_the_band_above_the_table():
     assert result.page_box == (10, 10, 390, 580)
 
 
-def test_without_a_table_only_identifier_lines_are_hidden():
+def test_without_a_table_header_remains_hidden_even_with_identifier_matches():
     anchors = [TextBox(50, 40, 200, 70, "Name: Example")]
     result = redact(_sheet(), {}, anchors)
-    assert len(result.hidden_boxes) == 1
-    _x1, y1, _x2, y2 = result.hidden_boxes[0]
-    assert y2 < 120
-    assert y1 < 50
+    assert (0, 0, 400, 132) in result.hidden_boxes
+    assert len(result.hidden_boxes) == 2
 
 
 def _extraction() -> Extraction:

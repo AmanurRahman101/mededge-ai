@@ -90,7 +90,7 @@ export function Patient() {
       </button>
       <h1 style={{ marginTop: 24 }}>Add a report</h1>
       <p className="lede">
-        The name and phone lines are hidden on this machine. A language model sees the page only after you confirm the overlay.
+        Your image is sent to Meta to locate page regions. Review the redaction preview before the redacted page is sent for reading.
       </p>
 
       {!runId && (
@@ -121,7 +121,7 @@ export function Patient() {
 
       {run && waiting && (
         <div className="stack">
-          <p className="lede">Red marks what will stay hidden. Green marks the table that will be read.</p>
+          <p className="lede">Red marks what will stay hidden. Green marks the table that will be read. Check that every name, phone number, and other private detail is covered; go back if anything is visible.</p>
           <div className="sheet">
             <img src={`${apiBase}${run.overlay_url}`} alt="Report with hidden regions marked in red" />
           </div>

@@ -102,11 +102,12 @@ def redact(
         )
 
     hidden: list[tuple[int, int, int, int]] = []
+    # Always cover the header: an OCR match elsewhere does not establish that
+    # handwritten names or other identifiers in the header were detected.
+    header_bottom = max(1, int(page_h * 0.22))
     if table_box is not None and table_box[1] > 8:
-        hidden.append((0, 0, page_w, table_box[1]))
-    elif table_box is None and not anchors:
-        # No table and no printed identifier line: hide a short top band.
-        hidden.append((0, 0, page_w, max(1, int(page_h * 0.22))))
+        header_bottom = max(header_bottom, table_box[1])
+    hidden.append((0, 0, page_w, header_bottom))
 
     for concept in IDENTIFIER_CONCEPTS:
         for box in regions.get(concept, []):
