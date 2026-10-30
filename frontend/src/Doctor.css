@@ -17,7 +17,7 @@
 .doctor-patient strong { font-size: 16px; font-weight: 600; }
 .doctor-patient small { color: var(--muted); overflow-wrap: anywhere; }
 .doctor-patient > span:last-child { white-space: nowrap; font-size: 13px; }
-.doctor-patient:hover, .doctor-patient[aria-pressed="true"] { padding-inline: 14px; background: var(--surface); }
+.doctor-patient:hover, .doctor-patient[aria-expanded="true"] { padding-inline: 14px; background: var(--surface); }
 .doctor-record { flex: 1; margin: 44px auto 80px; }
 .doctor-record-head { margin: 54px 0 40px; }
 .doctor-review-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(24px, 4vw, 52px); margin-top: 24px; }
@@ -32,3 +32,11 @@
   .doctor-review-grid { grid-template-columns: minmax(0, 1fr); }
   .doctor-record-head { margin-top: 38px; }
 }
+
+.doctor-timeline { margin-top: 24px; }
+.doctor-timeline-item { padding: 22px 0; border-top: 1px solid var(--line); }
+.doctor-timeline-item h3 { margin: 0 0 6px; }
+.doctor-note { margin-top: 18px; padding: 18px; border-radius: 10px; background: var(--surface); }
+.doctor-note .lede { margin: 6px 0; }
+.doctor-timeline details { margin-top: 14px; }
+.doctor-timeline summary { cursor: pointer; font-weight: 600; }

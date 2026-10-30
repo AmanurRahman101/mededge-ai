@@ -1,5 +1,6 @@
 """Patient-controlled chart connections and history."""
 
+import json
 import re
 import secrets
 import shutil
@@ -357,6 +358,119 @@ def records(
             ],
             "has_more": len(rows) > limit,
         }
+
+
+@router.get("/patients/{patient_id}/overview")
+def patient_overview(patient_id: str, request: Request, offset: int = 0, limit: int = 20):
+    """Return saved chart history, not a model-generated clinical assessment."""
+    doctor = require_role(request, "doctor")
+    limit = min(max(limit, 1), 50)
+    with request.app.state.db.session() as session:
+        connection = session.exec(
+            select(ChartConnection)
+            .where(
+                ChartConnection.patient_id == patient_id,
+                ChartConnection.doctor_id == doctor.id,
+            )
+            .with_for_update()
+        ).first()
+        if not connection or connection.status != "approved":
+            raise HTTPException(404, "Chart not found.")
+        rows = session.exec(
+            select(RunRow)
+            .where(RunRow.owner_id == patient_id)
+            .order_by(RunRow.created_at.desc(), RunRow.id.desc())
+            .offset(max(offset, 0))
+            .limit(limit + 1)
+        ).all()
+        page = rows[:limit]
+        ids = [r.id for r in page]
+        notes = (
+            session.exec(
+                select(ClinicalSummary)
+                .where(ClinicalSummary.run_id.in_(ids), ClinicalSummary.status == "published")
+                .order_by(ClinicalSummary.created_at.desc(), ClinicalSummary.id.desc())
+            ).all()
+            if ids
+            else []
+        )
+        author_ids = {note.author_id for note in notes}
+        authors = (
+            {
+                a.id: a.full_name
+                for a in session.exec(select(AuthUser).where(AuthUser.id.in_(author_ids))).all()
+            }
+            if author_ids
+            else {}
+        )
+        items = []
+        for row in page:
+            try:
+                extraction = json.loads(row.extraction_json or "{}")
+                if not isinstance(extraction, dict):
+                    extraction = {}
+            except (TypeError, ValueError):
+                extraction = {}
+
+            def readings(key, field, data=extraction):
+                values = data.get(key, [])
+                if not isinstance(values, list):
+                    return []
+                return [
+                    v.get(field)
+                    for v in values
+                    if isinstance(v, dict)
+                    and not v.get("contains_identifier")
+                    and isinstance(v.get(field), str)
+                    and v.get(field)
+                ]
+
+            lab_rows = extraction.get("rows", [])
+            lab_rows = (
+                [
+                    {
+                        "name": v.get("raw_name"),
+                        "value": v.get("value"),
+                        "value_text": v.get("value_text"),
+                        "unit": v.get("unit"),
+                    }
+                    for v in lab_rows
+                    if isinstance(v, dict)
+                    and not v.get("contains_identifier")
+                    and isinstance(v.get("raw_name"), str)
+                ]
+                if isinstance(lab_rows, list)
+                else []
+            )
+            items.append(
+                {
+                    "run_id": row.id,
+                    "title": row.title,
+                    "status": row.status,
+                    "document_type": row.document_type,
+                    "created_at": row.created_at.isoformat(),
+                    "archived": row.archived,
+                    "source_available": (
+                        request.app.state.db.runs_dir / row.id / "redacted.png"
+                    ).is_file(),
+                    "medications": readings("medications", "raw_text"),
+                    "tests": readings("advised_tests", "raw_name"),
+                    "lab_rows": lab_rows,
+                    "notes": [
+                        {
+                            "id": n.id,
+                            "summary_en": n.summary_en,
+                            "summary_bn": n.summary_bn,
+                            "author_name": authors.get(n.author_id, "Doctor"),
+                            "published_at": n.published_at.isoformat() if n.published_at else None,
+                            "amends_id": n.amends_id,
+                        }
+                        for n in notes
+                        if n.run_id == row.id
+                    ],
+                }
+            )
+        return {"records": items, "has_more": len(rows) > limit}
 
 
 @router.patch("/records/{run_id}")
