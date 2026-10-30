@@ -118,8 +118,24 @@ def test_summary_draft_hidden_until_doctor_verifies_and_revocation_blocks_publis
     data.update(reviewed_both_languages=True, acknowledge_unresolved=True)
     assert client.post(url, json=data).status_code == 200
     assert client.post(url, json=data).status_code == 409
+    amendment = client.post("/api/chart/records/record/summaries/summary/amend")
+    assert amendment.status_code == 200
+    amendment_id = amendment.json()["id"]
     sign_in(client, "patient1")
     assert len(client.get("/api/chart/records/record/summaries").json()["summaries"]) == 1
+    sign_in(client, "doctor")
+    data["summary_en"] = "Corrected English"
+    assert (
+        client.post(
+            f"/api/chart/records/record/summaries/{amendment_id}?publish=true", json=data
+        ).status_code
+        == 200
+    )
+    sign_in(client, "patient1")
+    published = client.get("/api/chart/records/record/summaries").json()["summaries"]
+    assert len(published) == 2
+    assert published[0]["summary_en"] == "English"
+    assert published[1]["amends_id"] == "summary"
     assert client.post("/api/chart/connections/doctor/revoke").status_code == 200
     sign_in(client, "doctor")
     assert client.get("/api/chart/records/record/summaries").status_code == 404

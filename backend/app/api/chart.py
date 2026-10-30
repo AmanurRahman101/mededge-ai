@@ -501,6 +501,7 @@ def summaries(run_id: str, request: Request):
                     "id": s.id,
                     "author_id": s.author_id,
                     "author_name": authors.get(s.author_id, "Doctor"),
+                    "amends_id": s.amends_id,
                     "transcript": s.transcript,
                     "summary_en": s.summary_en,
                     "summary_bn": s.summary_bn,
@@ -558,3 +559,45 @@ def save_summary(
         session.add(summary)
         session.commit()
     return {"status": "published" if publish else "draft"}
+
+
+@router.post("/records/{run_id}/summaries/{summary_id}/amend")
+def amend_summary(run_id: str, summary_id: str, request: Request):
+    from app.api.runs import _row_or_404
+
+    doctor = require_role(request, "doctor")
+    row = _row_or_404(request, run_id)
+    with request.app.state.db.session() as session:
+        connection = session.exec(
+            select(ChartConnection)
+            .where(
+                ChartConnection.patient_id == row.owner_id, ChartConnection.doctor_id == doctor.id
+            )
+            .with_for_update()
+        ).first()
+        original = session.get(ClinicalSummary, summary_id)
+        if (
+            not connection
+            or connection.status != "approved"
+            or not original
+            or original.run_id != run_id
+            or original.status != "published"
+        ):
+            raise HTTPException(404, "Published summary not found.")
+        draft_id = uuid.uuid4().hex
+        draft = ClinicalSummary(
+            id=draft_id,
+            run_id=run_id,
+            author_id=doctor.id,
+            transcript=original.transcript,
+            summary_en=original.summary_en,
+            summary_bn=original.summary_bn,
+            unresolved="[]",
+            status="draft",
+            created_at=datetime.now(UTC),
+            amends_id=original.id,
+        )
+        session.add(draft)
+        activity(session, row.owner_id, doctor.id, "summary_amendment_started", run_id)
+        session.commit()
+    return {"id": draft_id, "status": "draft"}

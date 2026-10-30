@@ -171,7 +171,7 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
           )}
           {!run.replay && <p className="banner review">AI readings can miss or misread details. Check the original with a clinician before using this result.</p>}
           {summaries.filter(item => item.status === "published").map(item => <article className="published-note" key={item.id}>
-            <p className="chart-eyebrow">DOCTOR-REVIEWED NOTE</p><h2>What your doctor shared</h2>
+            <p className="chart-eyebrow">DOCTOR-REVIEWED NOTE</p><h2>{item.amends_id ? "Updated note from your doctor" : "What your doctor shared"}</h2>
             <p className="lede">{item.author_name || "Doctor"} · {new Date(item.published_at || item.created_at).toLocaleDateString()} · Doctor account is self-declared</p>
             <h3>English</h3><p className="note-text">{item.summary_en}</p><h3 lang="bn">বাংলা</h3><p className="note-text" lang="bn">{item.summary_bn}</p>
             <button className="secondary" type="button" onClick={() => window.print()}>Print or save as PDF</button>

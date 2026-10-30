@@ -81,4 +81,5 @@ export interface ClinicalSummary {
   status: string;
   created_at: string;
   published_at: string | null;
+  amends_id?: string | null;
 }

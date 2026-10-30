@@ -83,6 +83,7 @@ class ClinicalSummary(SQLModel, table=True):
     status: str = "draft"
     created_at: datetime
     published_at: datetime | None = None
+    amends_id: str | None = Field(default=None, foreign_key="clinicalsummary.id")
 
 
 class SpendRow(SQLModel, table=True):
