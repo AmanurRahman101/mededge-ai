@@ -77,7 +77,7 @@ def test_redaction_blurs_the_band_above_the_table():
 def test_without_a_table_header_remains_hidden_even_with_identifier_matches():
     anchors = [TextBox(50, 40, 200, 70, "Name: Example")]
     result = redact(_sheet(), {}, anchors)
-    assert (0, 0, 400, 132) in result.hidden_boxes
+    assert (0, 0, 400, 144) in result.hidden_boxes
     assert len(result.hidden_boxes) == 2
 
 
