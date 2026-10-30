@@ -75,6 +75,33 @@ def sign_in(client, name):
     client.headers.update({"origin": "http://testserver", "x-csrf-token": f"csrf-{name}"})
 
 
+def test_doctor_approval_preserves_advised_tests_in_export_bundle(access_client):
+    client = access_client
+    sign_in(client, "doctor")
+    client.app.state.db.update(
+        "record",
+        extraction_json='{"document_type":"prescription","rows":[],"medications":[],'
+        '"advised_tests":[{"raw_name":"CRP"},{"raw_name":"RBS"}]}',
+        encounter_json='{"status":"finished","class_code":"AMB",'
+        '"class_display":"ambulatory","note":""}',
+    )
+    with client.app.state.db.session() as session:
+        session.add(
+            RunGrant(
+                run_id="record", user_id="doctor", expires_at=datetime.now(UTC) + timedelta(hours=1)
+            )
+        )
+        session.commit()
+    response = client.post("/api/runs/record/approve", json={})
+    assert response.status_code == 200, response.text
+    requests = [
+        entry["resource"]
+        for entry in response.json()["bundle"]["entry"]
+        if entry["resource"]["resourceType"] == "ServiceRequest"
+    ]
+    assert [request["code"]["text"] for request in requests] == ["CRP", "RBS"]
+
+
 def test_guest_demo_is_recorded_and_does_not_create_runs(access_client, monkeypatch):
     client = access_client
 

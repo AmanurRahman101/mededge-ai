@@ -353,7 +353,7 @@ export function Doctor() {
           <section aria-label="Advised tests">
             <h3>Tests as written</h3>
             <ul>{run.extraction.advised_tests.map((test, index) => <li key={`${test.raw_name}-${index}`}>{test.raw_name}</li>)}</ul>
-            <p className="lede">These tests are shown for review; they are not included in the FHIR export.</p>
+            <p className="lede">Review these transcriptions against the original. The approved export includes them as draft requests.</p>
           </section>
         )}
         {tab === "values" && run.encounter && (

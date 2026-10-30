@@ -134,6 +134,22 @@ def assemble(
             )
         )
 
+    for test in extraction.advised_tests:
+        entries.append(
+            _entry(
+                _id(),
+                {
+                    "resourceType": "ServiceRequest",
+                    "status": "draft",
+                    "intent": "order",
+                    "code": {"text": test.raw_name},
+                    "subject": {"reference": patient_id},
+                    "encounter": {"reference": encounter_id},
+                },
+                "ServiceRequest",
+            )
+        )
+
     if observation_ids and extraction.document_type in {"lab_report", "mixed"}:
         entries.append(
             _entry(

@@ -1,3 +1,5 @@
+from collections import Counter
+
 from app.pipeline.schemas import Extraction
 from app.pipeline.units import normalize_unit
 from app.pipeline.verify.report import Finding
@@ -17,6 +19,20 @@ def fidelity_errors(bundle: dict, extraction: Extraction) -> list[Finding]:
     ]
     rows = [row for row in extraction.rows if not row.contains_identifier]
     scripts = [item for item in extraction.medications if not item.contains_identifier]
+    test_requests = [
+        entry.get("resource") or {}
+        for entry in bundle.get("entry") or []
+        if (entry.get("resource") or {}).get("resourceType") == "ServiceRequest"
+    ]
+    expected_tests = Counter(test.raw_name.strip().casefold() for test in extraction.advised_tests)
+    actual_tests = Counter(
+        str((request.get("code") or {}).get("text") or "").strip().casefold()
+        for request in test_requests
+    )
+    if expected_tests != actual_tests:
+        findings.append(
+            Finding("ServiceRequest", "test requests do not match the extracted tests", "fidelity")
+        )
     if len(observations) != len(rows):
         findings.append(
             Finding(

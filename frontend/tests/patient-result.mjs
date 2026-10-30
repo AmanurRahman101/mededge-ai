@@ -36,5 +36,5 @@ doctorModule._compile(doctorResult.outputFiles[0].text, doctorModule.filename);
 const doctorHtml = renderToStaticMarkup(React.createElement(doctorModule.exports.Doctor));
 assert.match(doctorHtml, /CRP/, "Doctor result must show extracted advised tests");
 assert.match(doctorHtml, /RBS/, "Doctor result must show every extracted advised test");
-assert.match(doctorHtml, /not included in the FHIR export/);
+assert.match(doctorHtml, /approved export includes them as draft requests/);
 console.log("Patient and doctor results show extracted advised tests");

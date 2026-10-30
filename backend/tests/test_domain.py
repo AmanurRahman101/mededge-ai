@@ -9,7 +9,14 @@ from app.pipeline.fallback_assembler import assemble
 from app.pipeline.ocr_anchors import TextBox, identifier_boxes
 from app.pipeline.redact import redact
 from app.pipeline.sam_local import segment_local
-from app.pipeline.schemas import EncounterFields, Extraction, LabRow, LoincHit, MedicationRow
+from app.pipeline.schemas import (
+    AdvisedTest,
+    EncounterFields,
+    Extraction,
+    LabRow,
+    LoincHit,
+    MedicationRow,
+)
 from app.pipeline.segment import SamBox
 from app.pipeline.terminology import loinc_check_digit, loinc_is_valid
 from app.pipeline.units import normalize_unit
@@ -144,6 +151,31 @@ def test_fidelity_catches_a_changed_value():
     bundle["entry"][2]["resource"]["valueQuantity"]["value"] = 99
     report = verify(bundle, extraction, set(), {"g/dL"})
     assert any(item.layer == "fidelity" for item in report.findings)
+
+
+def test_fidelity_rejects_missing_changed_or_extra_advised_tests():
+    extraction = Extraction(
+        document_type="prescription", advised_tests=[AdvisedTest(raw_name="CRP")]
+    )
+    bundle = assemble(extraction, EncounterFields(), "PT-ANON-0001", {})
+    assert verify(bundle, extraction, set(), set()).ok
+    request = next(
+        entry for entry in bundle["entry"] if entry["resource"]["resourceType"] == "ServiceRequest"
+    )
+    assert request["resource"]["status"] == "draft"
+    request["resource"]["code"]["text"] = "RBS"
+    assert any(
+        item.layer == "fidelity" for item in verify(bundle, extraction, set(), set()).findings
+    )
+    request["resource"]["code"]["text"] = "CRP"
+    bundle["entry"].remove(request)
+    assert any(
+        item.layer == "fidelity" for item in verify(bundle, extraction, set(), set()).findings
+    )
+    bundle["entry"].extend([request, request])
+    assert any(
+        item.layer == "fidelity" for item in verify(bundle, extraction, set(), set()).findings
+    )
 
 
 @pytest.mark.asyncio
