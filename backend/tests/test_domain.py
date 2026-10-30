@@ -81,6 +81,15 @@ def test_without_a_table_header_remains_hidden_even_with_identifier_matches():
     assert len(result.hidden_boxes) == 2
 
 
+def test_overlay_marks_full_page_for_reading_when_no_table_is_detected():
+    result = redact(_sheet(), {}, [])
+    overlay = Image.open(io.BytesIO(result.overlay_png)).convert("RGB")
+    header = overlay.getpixel((200, 100))
+    content = overlay.getpixel((200, 300))
+    assert header[0] > header[1]  # Redaction remains visible over the green area.
+    assert content[1] > content[0]  # The rest of the page is marked for reading.
+
+
 def _extraction() -> Extraction:
     return Extraction(
         document_type="lab_report",

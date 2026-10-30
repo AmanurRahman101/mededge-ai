@@ -121,7 +121,7 @@ export function Patient() {
 
       {run && waiting && (
         <div className="stack">
-          <p className="lede">Red marks what will stay hidden. If there is a green box, only that table will be read. If there is no green box, the rest of the page will be read. Check that every name, phone number, and other private detail is covered; go back if anything is visible.</p>
+          <p className="lede">Green marks the area that will be read; red marks what will stay hidden. Check that every name, phone number, and other private detail is covered in red; go back if anything is visible.</p>
           <div className="sheet">
             <img src={`${apiBase}${run.overlay_url}`} alt="Report with hidden regions marked in red" />
           </div>

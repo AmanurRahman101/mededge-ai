@@ -134,10 +134,14 @@ def redact(
         _blur(redacted, box)
 
     overlay = page_image.copy()
-    for box in hidden:
-        _paint(overlay, box, (48, 48, 210))
+    # Show the actual model input region even when the page has no table.
+    # Draw redaction last so hidden areas remain clear over the green region.
     if table_box is not None:
         _paint(overlay, table_box, (70, 160, 70))
+    else:
+        _paint(overlay, (0, 0, page_w, page_h), (70, 160, 70))
+    for box in hidden:
+        _paint(overlay, box, (48, 48, 210))
 
     table_png = (
         _encode_png(redacted[table_box[1] : table_box[3], table_box[0] : table_box[2]])
