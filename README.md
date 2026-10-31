@@ -1,54 +1,85 @@
 # MedEdge AI
 
-MedEdge AI turns paper lab reports, handwritten prescriptions, and spoken visit notes into verified HL7 FHIR R4 bundles.
+MedEdge AI turns paper lab reports, handwritten prescriptions, and a doctor's dictated note into a verified HL7 FHIR R4 bundle. The page is anonymized before any language model reads it, and the output is checked before a person approves it.
 
 **MedEdge AI is an administrative data interoperability and optical ingestion pipeline, not a clinical decision or diagnostic tool.** It does not diagnose, interpret a result, or suggest treatment.
 
 Built for the [Meta Global AI Developer Hackathon](https://dev.meta.ai/events/global-hackathon) (October 26 to November 4, 2026), Indie Developer track. Every commit in this repository is new work from that window.
 
+## Try it as a judge
+
+The deployed app has two fictional demo accounts. The sign-in page shows "Use demo patient" and "Use demo doctor" buttons that fill the form. The password is shown there on purpose; it protects nothing real.
+
+| Role | What to do |
+| --- | --- |
+| Demo patient | Open the chart. A connected doctor, a verified CBC record with its source image, and a published note are already there. Open the record to see the "How this record was made" panel and the FHIR JSON. |
+| Demo doctor | Open the connected patient. Use "Use the sample dictation" to run the whole pipeline: SAM 3.1, Muse Voice, Muse Spark, the FHIR agent, and the verifier. |
+
+Demo accounts cannot upload their own photos, change the password, or revoke the connection. Their data resets hourly. A guest tour of three fictional samples needs no account at all.
+
 ## Two roles
 
-- **Patients** add a report, confirm what is hidden, see the values exactly as printed, and share a 6-character code.
-- **Doctors** open that code or upload a report, dictate an administrative visit note, review the result, and approve the export.
+- **Patients** add a report photo, confirm what is hidden, see the values exactly as printed, and approve a doctor's access to their chart.
+- **Doctors** open a connected patient's chart, upload a report, dictate a note, review the reading against the source, and approve the export.
 
-Patients and doctors can register with an email address and password. Accounts require email verification; a doctor account is self-declared and is not verification of medical credentials. The fictional guest demo does not require an account and does not call models or create runs.
+Accounts need a verified email. A doctor account is self-declared and is not verification of medical credentials.
 
-## Architecture
+## How Meta's tools are used
+
+| Stage | Meta tool | What it does |
+| --- | --- | --- |
+| Find regions | SAM 3.1 | Finds the page, table, barcode, signature, stamp, and photo. The name header and anything personal are blurred before the next step. |
+| Read the page | Muse Spark 1.3 (vision) | Reads the redacted page into structured rows exactly as printed. |
+| Transcribe | Muse Voice Transcribe | Turns the doctor's recording into text. |
+| Translate | Muse Spark 1.3 | Gives the dictated note in English and Bangla. It does not summarize or add anything. |
+| Build the bundle | Muse Spark 1.3 as an agent | Calls tools to look up LOINC and UCUM, then submits a FHIR bundle that the verifier accepts or rejects. |
+
+Every run keeps its trace: which model answered, how long it took, each tool call, each verifier layer, and whether a deterministic fallback was used. The "How this record was made" panel shows it.
 
 ```mermaid
 flowchart LR
   photo[Report photo] --> sam[SAM 3.1 regions]
-  photo --> ocr[Local OCR anchors]
-  sam --> redact[Dewarp and blur]
-  ocr --> redact
-  redact --> confirm[User confirms the overlay]
-  confirm --> extract[Extractor]
-  mic[Visit dictation] --> asr[Muse Voice Transcribe]
-  asr --> encounter[Encounter structurer]
-  extract --> agent[FHIR agent]
-  encounter --> agent
+  sam --> redact[Blur and confirm]
+  redact --> extract[Muse Spark reads the page]
+  mic[Doctor dictation] --> asr[Muse Voice Transcribe]
+  asr --> translate[Muse Spark transcribes and translates]
+  extract --> agent[FHIR agent with LOINC and UCUM tools]
+  translate --> agent
   agent --> verify[Verifier]
-  verify --> export[FHIR R4 export]
+  verify --> review[Doctor reviews]
+  review --> export[FHIR R4 export]
 ```
 
-The full page goes to SAM 3.1 only, or stays on the machine when `SAM_PROVIDER=local`. A language model receives the redacted page after the user confirms the overlay. The Patient resource is a session pseudonym. `store` is false on Meta calls. Zero Data Retention is claimed only if Meta enables it on the account.
+The full page goes to SAM 3.1 only. A language model receives the redacted page after the patient or doctor confirms the overlay. The Patient resource is a session pseudonym. `store` is false on Meta calls. Zero Data Retention is claimed only if Meta enables it on the account.
 
-Prescriptions are transcribed. A dose such as `1+0+1` is copied into FHIR timing. The app adds no dose advice and no interaction check.
+## What MedEdge never does
 
-## Models
-
-| Job | Model |
-| --- | --- |
-| Page, table, barcode, signature, stamp, photo | SAM 3.1 |
-| Read the redacted page | Partner Muse Spark Open, else Muse Glimmer on Colab, else Muse Spark 1.3 |
-| Transcribe | Muse Voice Transcribe |
-| Structure the visit and build the bundle | Muse Spark 1.3 |
-
-Set the extractor chain in `.env`, for example `ROLE_EXTRACTOR=glimmer:muse-glimmer,meta:muse-spark-1.3`. The result names the model that actually answered. `colab/glimmer_server.ipynb` serves Muse Glimmer on an L4. A Colab session can die, so the hosted demo must keep Muse Spark 1.3 in the chain.
+- It does not diagnose, interpret a value, or suggest treatment.
+- It does not compute High or Low flags. A flag appears only if the paper printed one.
+- It does not give dose advice or check interactions. A dose such as `1+0+1` is copied as written.
+- It does not summarize a doctor's note. The dictated words are transcribed and translated, and the doctor publishes them as the doctor's own words.
+- It does not send an unredacted page to a language model.
 
 ## Checks
 
-The bundle is checked for R4 schema, internal references, LOINC check digits, UCUM units, a one-to-one match with the source rows, and a policy that rejects diagnoses and computed interpretations. If the agent cannot produce a valid bundle, a deterministic assembler does, and the screen says "Assembled by fallback." "Inject a fault" adds one labeled failure so the repair is visible.
+The bundle is checked for R4 schema, internal references, LOINC check digits, UCUM units, a one-to-one match with the source rows, and a policy that rejects diagnoses and computed interpretations. If the agent cannot produce a valid bundle, a deterministic assembler does, and the screen says "Assembled by fallback." "Inject a fault" on a sample run adds one labeled failure so the agent's repair is visible in the trace.
+
+## Evaluation
+
+`scripts/eval.py` runs on the three fictional sample documents. Live numbers come from the real Meta API with `muse-spark-1.3`, no fallback used. These are small synthetic samples, so they show the pipeline works. They are not a claim about accuracy on real documents.
+
+| Sample | Names read | Values read | Time |
+| --- | --- | --- | --- |
+| CBC report | 5/5 | 5/5 | 3.7 s |
+| Lipid report | 4/4 | 4/4 | 3.6 s |
+| Prescription | 2/2 medicines | 2/2 doses | 4.0 s |
+
+Offline checks: 6/6 unit dialects (`lakh/cumm`, `gm%`, `mg%`, `/cumm`, `mm/1st hr`, `mmol/L`), 5/5 LOINC check digits, 3/3 sample truths assembled into valid bundles.
+
+```powershell
+backend\.venv\Scripts\python scripts\eval.py          # offline
+backend\.venv\Scripts\python scripts\eval.py --live   # spends Meta credit
+```
 
 ## Run it
 
@@ -68,51 +99,39 @@ npm install
 npm run dev
 ```
 
-The app is at http://localhost:5173. In development, verification and password-reset emails are saved as `.eml` files in `backend/var/mail/`; open the newest file to use its link. These files contain authentication links and are gitignored. Put `MODEL_API_KEY` in `.env` to use live model features. Fictional samples remain available as recorded readings without a key.
+The app is at http://localhost:5173. In development, verification and password-reset emails are saved as `.eml` files in `backend/var/mail/` (gitignored). Put `MODEL_API_KEY` in `.env` for live model features. To try the demo accounts locally, set `DEMO_PATIENT_EMAIL`, `DEMO_DOCTOR_EMAIL`, and a `DEMO_PASSWORD` of 12 or more characters.
 
 ```powershell
 backend\.venv\Scripts\python -m pytest -c backend\pyproject.toml backend\tests
 backend\.venv\Scripts\python -m ruff check backend\app backend\tests
-backend\.venv\Scripts\python scripts\eval.py
+cd frontend; npm test
 ```
 
 `scripts/smoke_meta.py` calls the live Meta API and spends credit. Do not run it unless you mean to.
 
-## Evaluation
-
-`scripts/eval.py` checks the fictional sample sheets. These numbers are the deterministic pieces, not a claim about model accuracy:
-
-| Check | Result |
-| --- | --- |
-| Unit dialects (`lakh/cumm`, `gm%`, `mg%`, `/cumm`, `mm/1st hr`, `mmol/L`) | 6/6 |
-| LOINC check digits on five known codes | 5/5 |
-| Sample ground truth assembled into a valid bundle | 3/3 |
-
-`python scripts/eval.py --live` adds one extractor call when `MODEL_API_KEY` is set and reports how many printed names matched. That number is filled in after a live run. It is not invented here.
+Role routing is set in `.env`, for example `ROLE_EXTRACTOR=glimmer:muse-glimmer,meta:muse-spark-1.3`. The result names the model that actually answered. `colab/glimmer_server.ipynb` serves Muse Glimmer on an L4. A Colab session can die, so a hosted demo keeps Muse Spark 1.3 in the chain.
 
 ## Data
 
-`data/samples/` holds three fictional drawings. They are not photographs of real patients. Put real reports in `data/private/raw/`. That folder is gitignored. See `data/INTAKE.md`.
+`data/samples/` holds three fictional drawings and a short synthetic dictation. They are not photographs of real people. Real reports belong in `data/private/`, which is gitignored. See `data/INTAKE.md`.
 
 ## Deploy
 
-`render.yaml` builds one Docker service with the React frontend and FastAPI backend on the same origin. Configure the following in Render's environment settings:
+`render.yaml` builds one Docker service with the React frontend and FastAPI backend on the same origin. Set these in Render's environment settings:
 
-- `APP_ENV=production` and `APP_BASE_URL` set to the HTTPS origin of the deployed app.
-- `DATABASE_URL` set to a pooled Neon PostgreSQL connection string with TLS. Set `DATABASE_URL_UNPOOLED` to the direct connection string for the same Neon database; the container uses it for Alembic migrations at startup. If omitted, migrations use `DATABASE_URL`, which is convenient for SQLite development.
-- `RESEND_API_KEY` and `RESEND_FROM_EMAIL` set to a sender on a verified domain or sending subdomain. Add the DNS records shown by Resend and wait for verification before inviting users. Disable open and click tracking for the sending domain so authentication links are not rewritten. Never commit credentials.
-- `MODEL_API_KEY` for live model features, plus the existing model and privacy configuration as needed.
+- `APP_ENV=production` and `APP_BASE_URL` set to the HTTPS origin of the app.
+- `DATABASE_URL` set to a pooled Neon PostgreSQL connection string with TLS, and `DATABASE_URL_UNPOOLED` set to the direct connection string. The container uses the direct one for Alembic migrations at startup.
+- `RESEND_API_KEY` and `RESEND_FROM_EMAIL` for a verified sender. Disable open and click tracking so authentication links are not rewritten.
+- `MODEL_API_KEY` for live model features.
+- `PSEUDONYM_SALT`, a unique random string of 16 or more characters. The app refuses to start in production with the default.
+- `DEMO_PATIENT_EMAIL`, `DEMO_DOCTOR_EMAIL`, and `DEMO_PASSWORD` for the judge accounts. Leave the password unset to turn them off.
 
-The auth email quota defaults to 90 messages/day and 2,500/month; `AUTH_EMAIL_DAILY_LIMIT` and `AUTH_EMAIL_MONTHLY_LIMIT` may lower these caps. Resend's own quotas apply across all applications using that account. If delivery is unavailable, account verification or recovery cannot complete until the service is restored. In production the app refuses to start without PostgreSQL, an HTTPS app URL, and a configured Resend sender/key.
+In production the app refuses to start without PostgreSQL, an HTTPS app URL, a Resend sender, and a real salt. It sends HSTS and a same-origin Content Security Policy. Dev routes stay off, and a daily budget (`DAILY_BUDGET_USD`) limits new model calls.
 
-Render free services sleep and their filesystem is ephemeral. Accounts and sessions persist in Neon; uploaded images do not persist through a restart or redeploy. Use fictional data for the demo and configure appropriate persistent storage before expecting images to survive. Dev routes stay off in production, and a daily budget limits new model calls.
+Render free services sleep, and their filesystem is ephemeral. Accounts persist in Neon, but uploaded images do not survive a restart. The demo accounts are reseeded at every startup, so they recover. For judging week, consider a paid instance with a disk so there is no cold start.
 
-Render deploys a Git commit or published image, not uncommitted files. Publish the reviewed MedEdge changes to the chosen repository branch or image before connecting the new service. Keep existing services for other projects separate.
-
-The MedEdge Render service tracks `codex/mededge-auth-deploy`; pushes to that branch trigger a new deployment when the GitHub provider connection is active.
-
-Local SAM 3.1 is `SAM_PROVIDER=local` plus `SAM_LOCAL_CHECKPOINT`. Without the weights the call fails with a clear error and the Meta API remains the default.
+Render deploys a Git commit, not uncommitted files. Point the service at `main`.
 
 ## Demo
 
-The 2:45 shot list is in `docs/DEMO.md`. Recording, the X post, and the portal submission are done by the author from that script.
+The 2:45 shot list is in `docs/DEMO.md`, with draft submission and X post text. Recording, posting, and the portal submission are done by the author.

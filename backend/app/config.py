@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     app_base_url: str = "http://localhost:5173"
     resend_api_key: SecretStr | None = None
     resend_from_email: str = ""
+    demo_patient_email: str = ""
+    demo_doctor_email: str = ""
+    demo_password: SecretStr | None = None
     auth_email_daily_limit: int = 90
     auth_email_monthly_limit: int = 2500
 

@@ -49,32 +49,76 @@ def offline() -> dict:
     }
 
 
-async def live() -> str:
+def _norm(name: str) -> str:
+    return "".join(ch for ch in name.casefold() if ch.isalnum())
+
+
+async def live() -> dict:
+    """One structured read of each fictional sample. Names must match exactly after folding."""
     from app.config import get_settings
     from app.models.providers import ImagePart, TextPart
     from app.models.router import ModelRouter
     from app.pipeline.agent.prompts import EXTRACT_INSTRUCTIONS
-    from app.pipeline.cases import SAMPLES, load_case
+    from app.pipeline.cases import SAMPLES, list_cases
 
     import httpx
 
     settings = get_settings()
     if not settings.model_api_key:
-        return "skipped (MODEL_API_KEY is not set)"
-    case = load_case("cbc")
-    if case is None:
-        return "skipped (no cbc sample)"
-    image = ImagePart((SAMPLES / case["file"]).read_bytes(), "image/png")
+        return {"status": "skipped", "reason": "MODEL_API_KEY is not set"}
+    report: dict = {"cases": []}
     async with httpx.AsyncClient(timeout=180) as http:
-        result = await ModelRouter(settings, http).structured(
-            "extractor",
-            instructions=EXTRACT_INSTRUCTIONS,
-            parts=[TextPart("Read this page."), image],
-            schema=Extraction,
-        )
-    expected = {row["raw_name"] for row in case["extraction"]["rows"]}
-    found = {row.raw_name for row in result.value.rows}
-    return f"{result.target} matched {len(expected & found)}/{len(expected)} names in {result.latency_ms} ms"
+        router = ModelRouter(settings, http)
+        for case in list_cases():
+            image = ImagePart((SAMPLES / case["file"]).read_bytes(), "image/png")
+            result = await router.structured(
+                "extractor",
+                instructions=EXTRACT_INSTRUCTIONS,
+                parts=[TextPart("Read this page."), image],
+                schema=Extraction,
+            )
+            expected_rows = case["extraction"]["rows"]
+            found = {_norm(row.raw_name): row for row in result.value.rows}
+            name_hits = 0
+            value_hits = 0
+            for row in expected_rows:
+                match = found.get(_norm(row["raw_name"]))
+                if match is None:
+                    continue
+                name_hits += 1
+                if row.get("value") is not None and match.value == row["value"]:
+                    value_hits += 1
+            expected_meds = case["extraction"].get("medications", [])
+            found_meds = [
+                (_norm(f"{item.drug_name or ''} {item.raw_text}"), item)
+                for item in result.value.medications
+            ]
+            med_hits = 0
+            dose_hits = 0
+            for item in expected_meds:
+                needle = _norm(item.get("drug_name") or item["raw_text"])
+                match = next((med for key, med in found_meds if needle and needle in key), None)
+                if match is None:
+                    continue
+                med_hits += 1
+                observed = f"{match.dose_text or ''} {match.raw_text}"
+                if item.get("dose_text") and item["dose_text"] in observed:
+                    dose_hits += 1
+            entry = {
+                "id": case["id"],
+                "model": str(result.target),
+                "latency_ms": result.latency_ms,
+                "fell_back": result.fell_back,
+            }
+            if expected_rows:
+                entry["names"] = f"{name_hits}/{len(expected_rows)}"
+                entry["values"] = f"{value_hits}/{len(expected_rows)}"
+            if expected_meds:
+                entry["medications"] = f"{med_hits}/{len(expected_meds)}"
+                entry["doses"] = f"{dose_hits}/{len(expected_meds)}"
+            report["cases"].append(entry)
+    report["ran_on"] = "2026-11-01"
+    return report
 
 
 def main() -> None:
@@ -84,6 +128,9 @@ def main() -> None:
     report = offline()
     if args.live:
         report["live_extractor"] = asyncio.run(live())
+        out = Path(__file__).resolve().parent / "out"
+        out.mkdir(exist_ok=True)
+        (out / "eval-live.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))
 
 

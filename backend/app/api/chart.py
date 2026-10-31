@@ -14,6 +14,7 @@ from sqlalchemy import delete, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
+from app import demo
 from app.auth.security import client_key, digest, require_role, require_user, throttle
 from app.store.db import (
     AuthUser,
@@ -267,6 +268,8 @@ def decide(request: Request, doctor_id: str, body: Decision):
 @router.post("/connections/{other_id}/revoke")
 def revoke(request: Request, other_id: str):
     user = require_user(request)
+    if demo.is_demo(user.id):
+        raise HTTPException(403, "Shared demo accounts cannot change consent.")
     patient_id, doctor_id = (user.id, other_id) if user.role == "patient" else (other_id, user.id)
     with request.app.state.db.session() as session:
         now = datetime.now(UTC)
@@ -658,7 +661,7 @@ def save_summary(
         if summary.status != "draft":
             raise HTTPException(409, "Published summaries cannot be edited.")
         if publish and not body.reviewed_both_languages:
-            raise HTTPException(422, "Review both language summaries before publishing.")
+            raise HTTPException(422, "Review both versions of the note before publishing.")
         if publish and summary.unresolved not in ("", "[]") and not body.acknowledge_unresolved:
             raise HTTPException(422, "Review and acknowledge unresolved details.")
         summary.summary_en = body.summary_en.strip()

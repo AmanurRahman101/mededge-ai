@@ -4,12 +4,15 @@ import { useApp } from "./store";
 import type { ClinicalSummary, SampleCase } from "./types";
 import { useRun } from "./useRun";
 import { navigate } from "./navigation";
+import { prepareImage } from "./image";
+import { FhirView, TracePanel } from "./Trace";
 
 export function Patient({ initialRunId = null }: { initialRunId?: string | null }) {
   const setScreen = useApp((state) => state.setScreen);
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [cases, setCases] = useState<SampleCase[]>([]);
   const [showSamples, setShowSamples] = useState(false);
+  const [injectFault, setInjectFault] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<ClinicalSummary[]>([]);
@@ -33,6 +36,7 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
   }, [runId, run?.status]);
 
   async function start(form: FormData) {
+    if (busy) return;
     setBusy(true);
     setLocalError(null);
     try {
@@ -47,15 +51,18 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
   }
 
   async function onFile(file: File | undefined) {
-    if (!file) return;
+    if (!file || busy) return;
+    setBusy(true);
     const form = new FormData();
-    form.append("image", file);
+    form.append("image", await prepareImage(file));
+    setBusy(false);
     await start(form);
   }
 
   async function onSample(id: string) {
     const form = new FormData();
     form.append("case_id", id);
+    if (injectFault) form.append("inject_fault", "true");
     await start(form);
   }
 
@@ -100,6 +107,12 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
           <button className="secondary" type="button" onClick={() => setShowSamples((open) => !open)}>
             Use a fictional sample
           </button>
+          {showSamples && (
+            <label className="check">
+              <input type="checkbox" checked={injectFault} onChange={(event) => setInjectFault(event.target.checked)} />
+              Inject a fault to show the agent repairing its own bundle
+            </label>
+          )}
           {showSamples &&
             cases.map((item) => (
               <button key={item.id} className="secondary" type="button" disabled={busy} onClick={() => void onSample(item.id)}>
@@ -124,7 +137,7 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
         </div>
       )}
 
-      {run && !waiting && !ready && <p className="lede">{events.at(-1)?.message ?? "Working through the page."}</p>}
+      {run && !waiting && !ready && <><p className="lede" role="status">{events.at(-1)?.message ?? "Working through the page."}</p><TracePanel run={run} live={events} /></>}
 
       {run && ready && run.extraction && (
         <div className="stack">
@@ -170,10 +183,12 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
             </section>
           )}
           {!run.replay && <p className="banner review">AI readings can miss or misread details. Check the original with a clinician before using this result.</p>}
+          <TracePanel run={run} live={events} />
+          <FhirView bundle={run.bundle} />
           {summaries.filter(item => item.status === "published").map(item => <article className="published-note" key={item.id}>
-            <p className="chart-eyebrow">DOCTOR-REVIEWED NOTE</p><h2>{item.amends_id ? "Updated note from your doctor" : "What your doctor shared"}</h2>
-            <p className="lede">{item.author_name || "Doctor"} · {new Date(item.published_at || item.created_at).toLocaleDateString()} · Doctor account is self-declared</p>
-            <h3>English</h3><p className="note-text">{item.summary_en}</p><h3 lang="bn">বাংলা</h3><p className="note-text" lang="bn">{item.summary_bn}</p>
+            <p className="chart-eyebrow">DOCTOR’S DICTATED NOTE</p><h2>{item.amends_id ? "Updated note from your doctor" : "Your doctor’s dictated note"}</h2>
+            <p className="lede">{item.author_name || "Doctor"} · {new Date(item.published_at || item.created_at).toLocaleDateString()} · Doctor account is self-declared · Spoken by the doctor, transcribed and translated by Muse Voice and Muse Spark, reviewed and published by the doctor</p>
+            <h3>English version</h3><p className="note-text">{item.summary_en}</p><h3 lang="bn">বাংলা সংস্করণ</h3><p className="note-text" lang="bn">{item.summary_bn}</p>
             <button className="secondary" type="button" onClick={() => window.print()}>Print or save as PDF</button>
           </article>)}
           <button className="primary" type="button" disabled={busy} onClick={() => navigate("/patient")}>

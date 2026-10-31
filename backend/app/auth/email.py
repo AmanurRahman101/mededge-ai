@@ -64,6 +64,11 @@ def _reserve(request, address: str) -> None:
         session.commit()
 
 
+DISCLAIMER = (
+    "MedEdge AI is an administrative data interoperability and optical ingestion pipeline, not a clinical decision or diagnostic tool."
+)
+
+
 def _auth_message(kind: str, link: str) -> tuple[str, str, str]:
     verify = kind == "verify"
     title = "Verify your email" if verify else "Reset your password"
@@ -78,7 +83,8 @@ def _auth_message(kind: str, link: str) -> tuple[str, str, str]:
     plain = (
         f"MedEdge AI\n\n{title}\n\n{description}\n\n{action}:\n{link}\n\n"
         f"This link expires in {expiry}. Opening the link will ask you to confirm.\n\n"
-        "If you did not request this email, you can safely ignore it.\n"
+        "If you did not request this email, you can safely ignore it.\n\n"
+        f"{DISCLAIMER}\n"
     )
     body = f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{title}</title></head>
@@ -99,7 +105,7 @@ def _auth_message(kind: str, link: str) -> tuple[str, str, str]:
 <p style="margin:0 0 8px;color:#3f3f46;font-size:13px;font-weight:700;">Button not working?</p>
 <p style="margin:0;color:#71717a;font-size:12px;line-height:1.6;overflow-wrap:anywhere;word-break:break-all;">Copy and paste this link into your browser:<br><a href="{safe_link}" style="color:#52525b;text-decoration:underline;">{safe_link}</a></p>
 </td></tr>
-<tr><td style="padding:22px 4px 0;color:#71717a;font-size:12px;line-height:1.6;">If you didn’t request this email, you can safely ignore it.<br><span style="color:#a1a1aa;">MedEdge AI &nbsp; / &nbsp; Account security</span></td></tr>
+<tr><td style="padding:22px 4px 0;color:#71717a;font-size:12px;line-height:1.6;">If you didn’t request this email, you can safely ignore it.<br><span style="color:#a1a1aa;">MedEdge AI &nbsp; / &nbsp; Account security</span><br><span style="color:#a1a1aa;">{DISCLAIMER}</span></td></tr>
 </table></td></tr></table></body></html>'''
     return title, plain, body
 

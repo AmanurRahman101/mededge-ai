@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 from sse_starlette.sse import EventSourceResponse
 
+from app import demo
 from app.api.chart import active_connection
 from app.auth.security import require_role, require_user
 from app.events import EventBus
@@ -19,7 +20,7 @@ from app.limit import limiter
 from app.pipeline.cases import case_image
 from app.pipeline.fallback_assembler import assemble
 from app.pipeline.orchestrator import RunContext, new_run_id, pseudonym_for
-from app.pipeline.schemas import EncounterFields, Extraction, LabRow, MedicationRow
+from app.pipeline.schemas import EncounterFields, Extraction, LabRow, LoincHit, MedicationRow
 from app.pipeline.terminology import search_loinc
 from app.pipeline.verify import verify
 from app.store.db import ChartConnection, Database, RunRow
@@ -65,6 +66,8 @@ async def create_run(
     source_run_id: str | None = Form(default=None),
 ) -> dict:
     user = require_user(request)
+    if demo.is_demo(user.id) and image is not None:
+        raise HTTPException(403, "Shared demo accounts accept the fictional samples only.")
     if user.role == "doctor" and not case_id:
         if not patient_id or not active_connection(_db(request), patient_id, user.id):
             raise HTTPException(404, "Patient chart not found.")
@@ -81,7 +84,8 @@ async def create_run(
         if loaded is None:
             raise HTTPException(status_code=404, detail="Unknown sample case")
         image_bytes, mime = loaded
-        auto_confirm = True
+        # Samples show the same confirm step as a real photo.
+        auto_confirm = False
     elif image is not None:
         image_bytes = await image.read(MAX_IMAGE_BYTES + 1)
         if len(image_bytes) > MAX_IMAGE_BYTES:
@@ -256,9 +260,28 @@ async def approve_run(run_id: str, body: ApproveBody, request: Request) -> dict:
         extraction.medications = body.medications
     if body.note is not None:
         encounter.note = body.note
-    loinc = {}
-    allowed: set[str] = set()
+    # Reuse codes the agent already resolved; look up only names the doctor changed.
+    loinc: dict[str, LoincHit] = {}
+    rx: dict[str, str | None] = {}
+    if row.bundle_json:
+        for entry in json.loads(row.bundle_json).get("entry", []):
+            resource = entry.get("resource", {})
+            if resource.get("resourceType") == "Observation":
+                code = resource.get("code", {})
+                for coding in code.get("coding", []):
+                    if coding.get("system") == "http://loinc.org" and code.get("text"):
+                        loinc[code["text"].lower()] = LoincHit(
+                            code=coding["code"], display=coding.get("display", "")
+                        )
+            elif resource.get("resourceType") == "MedicationRequest":
+                concept = resource.get("medicationCodeableConcept", {})
+                for coding in concept.get("coding", []):
+                    if "rxnorm" in str(coding.get("system")) and coding.get("display"):
+                        rx[str(coding["display"]).lower()] = coding.get("code")
+    allowed: set[str] = {hit.code for hit in loinc.values()}
     for item in extraction.rows:
+        if item.raw_name.lower() in loinc:
+            continue
         try:
             hits = await search_loinc(request.app.state.http, item.raw_name, max_list=1)
         except Exception:
@@ -266,7 +289,7 @@ async def approve_run(run_id: str, body: ApproveBody, request: Request) -> dict:
         if hits:
             loinc[item.raw_name.lower()] = hits[0]
             allowed.add(hits[0].code)
-    bundle = assemble(extraction, encounter, row.pseudonym, loinc)
+    bundle = assemble(extraction, encounter, row.pseudonym, loinc, rx)
     report = verify(bundle, extraction, allowed, set())
     if not report.ok:
         raise HTTPException(status_code=422, detail=report.as_text())
@@ -373,6 +396,7 @@ def _public(row: RunRow) -> dict:
         "used_fallback": row.used_fallback,
         "replay": row.replay,
         "inject_fault": row.inject_fault,
+        "trace": json.loads(row.trace_json) if row.trace_json else [],
         # Share codes are returned only by the owner's explicit share action.
         "share_code": None,
         "overlay_url": f"/api/runs/{row.id}/files/overlay.png",

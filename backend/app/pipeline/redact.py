@@ -104,7 +104,13 @@ def redact(
     hidden: list[tuple[int, int, int, int]] = []
     # Always cover the header: an OCR match elsewhere does not establish that
     # handwritten names or other identifiers in the header were detected.
-    header_bottom = max(1, int(page_h * 0.24))
+    # With OCR anchors the band ends just below the lowest identifier line, so result
+    # rows that start high on a sheet stay readable. Without anchors, hide the top 24%.
+    if anchors:
+        lowest = max(anchor.y2 - py1 for anchor in anchors)
+        header_bottom = max(int(page_h * 0.12), min(lowest + 40, int(page_h * 0.24)))
+    else:
+        header_bottom = max(1, int(page_h * 0.24))
     if table_box is not None and table_box[1] > 8:
         header_bottom = max(header_bottom, table_box[1])
     hidden.append((0, 0, page_w, header_bottom))
@@ -133,7 +139,8 @@ def redact(
     for box in hidden:
         _blur(redacted, box)
 
-    overlay = page_image.copy()
+    # Paint on the blurred page so a stored overlay cannot be read back.
+    overlay = redacted.copy()
     # Show the actual model input region even when the page has no table.
     # Draw redaction last so hidden areas remain clear over the green region.
     if table_box is not None:

@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
+from app import demo
 from app.auth.security import require_user
-from app.pipeline.cases import case_image, list_cases, load_case, private_inbox
+from app.pipeline.cases import SAMPLES, case_image, list_cases, load_case, private_inbox
 from app.pipeline.fallback_assembler import assemble
 from app.pipeline.schemas import EncounterFields, Extraction
 
@@ -33,6 +34,30 @@ async def inbox(request: Request) -> dict:
         raise HTTPException(status_code=404, detail="Not found")
     require_user(request)
     return {"files": private_inbox()}
+
+
+@router.get("/api/demo/accounts")
+async def demo_accounts(request: Request) -> dict:
+    """Shared fictional accounts for judges. Credentials are public by design."""
+    settings = request.app.state.settings
+    if not demo.enabled(settings):
+        return {"enabled": False}
+    return {
+        "enabled": True,
+        "patient_email": settings.demo_patient_email,
+        "doctor_email": settings.demo_doctor_email,
+        "password": settings.demo_password.get_secret_value(),
+    }
+
+
+@router.get("/api/demo/dictation")
+async def demo_dictation(request: Request) -> Response:
+    """A fictional administrative dictation for judges without a microphone."""
+    require_user(request)
+    path = SAMPLES / "dictation.wav"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    return Response(path.read_bytes(), media_type="audio/wav")
 
 
 @router.get("/api/demo/{case_id}")

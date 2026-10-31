@@ -41,6 +41,7 @@ export function App() {
     const doctorPath = path === "/doctor" || path.startsWith("/doctor/");
     if ((patientPath || doctorPath || path === "/account") && !user) {
       const role = patientPath ? "?role=patient" : doctorPath ? "?role=doctor" : "";
+      if (path !== "/patient" && path !== "/doctor") sessionStorage.setItem("mededge-next", path);
       navigate(`/signin${role}`, true);
     } else if (((patientPath && user?.role !== "patient") || (doctorPath && user?.role !== "doctor")) && user) {
       navigate(`/${user.role}`, true);

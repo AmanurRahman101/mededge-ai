@@ -12,6 +12,7 @@ from sqlalchemy import delete, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
+from app import demo
 from app.auth.email import enforce_cooldown, send_auth_mail
 from app.auth.security import (
     client_key,
@@ -264,7 +265,7 @@ async def forgot(body: EmailBody, request: Request) -> dict:
     throttle(request, "forgot-recipient", body.email, 3, 3600)
     enforce_cooldown(request, body.email)
     user = get_by_email(request, body.email)
-    if user:
+    if user and not demo.is_demo(user.id):
         await issue_mail(request, user, "reset")
     return {"message": "If an account exists, a password reset email will be sent."}
 
@@ -321,6 +322,8 @@ async def logout(request: Request, response: Response) -> dict:
 async def logout_all(request: Request, response: Response) -> dict:
     verify_request(request)
     user = require_user(request)
+    if demo.is_demo(user.id):
+        raise HTTPException(403, "Shared demo accounts cannot sign out other sessions.")
     with request.app.state.db.session() as session:
         session.exec(delete(AuthSession).where(AuthSession.user_id == user.id))
         session.commit()
@@ -338,6 +341,8 @@ async def logout_all(request: Request, response: Response) -> dict:
 async def change_password(body: ChangeBody, request: Request, response: Response) -> dict:
     verify_request(request)
     user = require_user(request)
+    if demo.is_demo(user.id):
+        raise HTTPException(403, "The shared demo password cannot be changed.")
     throttle(request, "change-password", user.id, 10, 900)
     if not await verify_password(body.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Current password is incorrect.")

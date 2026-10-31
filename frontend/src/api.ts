@@ -73,3 +73,11 @@ export const exportRun = async (runId: string) => { await post(`/api/runs/${runI
 export async function shareRun(runId: string): Promise<string> { return (await post<{ code: string }>(`/api/runs/${runId}/share`)).code; }
 export const openShare = (code: string) => post<Run>("/api/share/redeem", { code });
 export async function dictate(runId: string, wav: Blob): Promise<Run> { const form = new FormData(); form.append("audio", wav, "visit.wav"); return request<Run>(`/api/runs/${runId}/dictate`, { method: "POST", body: form }); }
+
+export interface DemoAccounts { enabled: boolean; patient_email?: string; doctor_email?: string; password?: string }
+export const getDemoAccounts = () => request<DemoAccounts>("/api/demo/accounts");
+export async function getSampleDictation(): Promise<Blob> {
+  const response = await fetch(`${apiBase}/api/demo/dictation`, { credentials: "same-origin" });
+  if (!response.ok) throw new ApiError("The sample dictation is unavailable.", response.status);
+  return response.blob();
+}

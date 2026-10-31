@@ -4,7 +4,6 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func
 from sqlmodel import select
-from starlette.websockets import WebSocketDisconnect
 
 from app.auth.security import digest
 from app.config import Settings
@@ -123,6 +122,22 @@ def test_guest_demo_is_recorded_and_does_not_create_runs(access_client, monkeypa
         assert session.exec(select(func.count()).select_from(RunRow)).one() == before
 
 
+def test_sample_case_still_waits_for_confirmation(access_client, monkeypatch):
+    client = access_client
+    sign_in(client, "patient1")
+    contexts = []
+
+    async def capture(context):
+        contexts.append(context)
+
+    monkeypatch.setattr(client.app.state.orchestrator, "execute", capture)
+    response = client.post("/api/runs", data={"case_id": "cbc", "auto_confirm": "true"})
+    assert response.status_code == 200
+    assert len(contexts) == 1
+    assert contexts[0].auto_confirm is False
+    assert contexts[0].case_id == "cbc"
+
+
 def test_real_upload_cannot_be_auto_confirmed(access_client, monkeypatch):
     client = access_client
     sign_in(client, "patient1")
@@ -186,15 +201,3 @@ def test_legacy_record_share_cannot_bypass_patient_consent(access_client):
     assert client.post("/api/share/redeem", json={"code": "ABC234"}).status_code == 410
     assert client.get("/api/runs/record").status_code == 404
 
-
-def test_voice_websocket_rejects_unauthenticated_or_wrong_origin(access_client):
-    client = access_client
-    with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect("/api/voice/stream", headers={"origin": "http://testserver"}):
-            pass
-    sign_in(client, "doctor")
-    with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect(
-            "/api/voice/stream", headers={"origin": "https://evil.example"}
-        ):
-            pass

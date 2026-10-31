@@ -86,7 +86,7 @@ async def run_agent(
         if unit:
             state.allowed_units.add(unit)
     tools = make_tools(http, state)
-    target = _agent_target(settings)
+    target = agent_target(settings)
     if target is None:
         return AgentResult(None, state, "none", 0, "agent provider is not configured")
 
@@ -184,7 +184,7 @@ async def run_agent(
     return AgentResult(None, state, str(target), max_turns, "turn limit reached")
 
 
-def _agent_target(settings: Settings) -> Target | None:
+def agent_target(settings: Settings) -> Target | None:
     for target in settings.chain("agent"):
         endpoint = settings.endpoint(target.provider)
         if endpoint and endpoint.configured and endpoint.protocol == "responses":

@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, Eye, EyeSlash, FileText, LockKey, ShareNetwork } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
-import { changePassword, forgotPassword, login, logout, register, resendVerification, resetPassword, setCsrfToken, verifyEmail, type UserRole } from "./api";
+import { changePassword, forgotPassword, getDemoAccounts, type DemoAccounts, login, logout, register, resendVerification, resetPassword, setCsrfToken, verifyEmail, type UserRole } from "./api";
 import { navigate } from "./navigation";
 import { useApp } from "./store";
 
@@ -37,8 +37,10 @@ export function AuthPage({ path }: { path: string }) {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [demoAccounts, setDemoAccounts] = useState<DemoAccounts | null>(null);
   const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get("token") ?? "");
 
+  useEffect(() => { if (path === "/signin") void getDemoAccounts().then(setDemoAccounts).catch(() => setDemoAccounts(null)); }, [path]);
   useEffect(() => { if (window.location.hash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`); }, []);
   useEffect(() => { if (!cooldown) return; const timer = window.setTimeout(() => setCooldown((value) => value - 1), 1000); return () => window.clearTimeout(timer); }, [cooldown]);
 
@@ -48,7 +50,7 @@ export function AuthPage({ path }: { path: string }) {
     if ((path === "/verify-email" || path === "/reset-password") && !token) { setError("This link is missing its token. Request a new link to continue."); return; }
     setBusy(true);
     try {
-      if (path === "/signin") { const user = await login(email, password, remember); setUser(user); navigate(`/${user.role}`, true); }
+      if (path === "/signin") { const user = await login(email, password, remember); setUser(user); const next = sessionStorage.getItem("mededge-next"); sessionStorage.removeItem("mededge-next"); navigate(next && (next === "/account" || next.startsWith(`/${user.role}/`)) ? next : `/${user.role}`, true); }
       else if (path === "/signup") { await register({ full_name: name.trim(), email, password, role }); setDone(true); }
       else if (path === "/verify-email") { await verifyEmail(token, password); setDone(true); setPassword(""); }
       else if (path === "/forgot-password") { await forgotPassword(email); setDone(true); }
@@ -76,6 +78,7 @@ export function AuthPage({ path }: { path: string }) {
     done && path === "/forgot-password" ? <div className="auth-success" role="status"><h2>Check your inbox.</h2><p>If an account exists for that address, you’ll receive a password reset link.</p><LinkButton to="/signin">Return to sign in</LinkButton></div> :
     done && path === "/reset-password" ? <div className="auth-success" role="status"><h2>Password updated.</h2><p>For your security, your other sessions have been signed out.</p><LinkButton className="primary auth-submit" to="/signin">Sign in <ArrowRight size={18} /></LinkButton></div> :
     <form className="auth-form" onSubmit={(event) => void submit(event)}>
+      {path === "/signin" && demoAccounts?.enabled && <div className="demo-login" role="group" aria-label="Judge demo accounts"><span>Judging? Try the shared demo, fictional data only.</span><div><button type="button" className="text-link" onClick={() => { setEmail(demoAccounts.patient_email ?? ""); setPassword(demoAccounts.password ?? ""); }}>Use demo patient</button><button type="button" className="text-link" onClick={() => { setEmail(demoAccounts.doctor_email ?? ""); setPassword(demoAccounts.password ?? ""); }}>Use demo doctor</button></div></div>}
       {path === "/signup" && <><div className="auth-field"><label htmlFor="full-name">Full name</label><input id="full-name" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" placeholder="Your full name" maxLength={100} required /></div><fieldset className="role-field"><legend>I’m joining as a</legend><div className="role-options"><label className={role === "patient" ? "selected" : ""}><input type="radio" name="role" value="patient" checked={role === "patient"} onChange={() => setRole("patient")} /><span>Patient<small>Manage and share records</small></span></label><label className={role === "doctor" ? "selected" : ""}><input type="radio" name="role" value="doctor" checked={role === "doctor"} onChange={() => setRole("doctor")} /><span>Doctor<small>Review and export records</small></span></label></div>{role === "doctor" && <small>Doctor accounts are self-declared; email verification does not verify credentials.</small>}</fieldset></>}
       {["/signin", "/signup", "/forgot-password", "/check-email"].includes(path) && <EmailField value={email} onChange={setEmail} />}
       {["/signin", "/signup", "/reset-password", "/verify-email"].includes(path) && <PasswordField label={path === "/reset-password" ? "New password" : "Password"} value={password} onChange={setPassword} autoComplete={path === "/signin" || path === "/verify-email" ? "current-password" : "new-password"} hint={path === "/signup" || path === "/reset-password" ? "At least 12 characters. Spaces are welcome." : undefined} />}

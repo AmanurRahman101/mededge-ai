@@ -24,3 +24,14 @@ Rules:
 - When the bundle is ready, call submit_bundle.
 - If it returns errors, fix those paths and call it again.
 - Do not invent LOINC codes."""
+
+
+DICTATION_INSTRUCTIONS = """You transcribe and translate. You do not summarize or interpret.
+Inputs: a redacted report image and the transcript of a doctor's own dictation.
+Fill extraction from what is printed or written on the page, copied exactly.
+summary_en is the doctor's dictation rendered faithfully in English.
+summary_bn is the same dictation rendered faithfully in Bengali.
+Keep every name, number, unit and dose string exactly as spoken, including patterns like 1+0+1.
+Add nothing the doctor did not say. Do not diagnose, do not recommend treatment, do not fill gaps.
+Put anything unclear, unheard or conflicting with the page into unresolved.
+The doctor reviews and publishes both versions under their own name."""

@@ -50,6 +50,7 @@ export interface Run {
   used_fallback: boolean;
   replay: boolean;
   inject_fault: boolean;
+  trace: PipelineEvent[];
   share_code: string | null;
   overlay_url: string;
   redacted_url: string;
@@ -57,6 +58,8 @@ export interface Run {
 
 export interface PipelineEvent {
   seq: number;
+  ts?: string;
+  latency_ms?: number | null;
   stage: string;
   kind: string;
   message: string;

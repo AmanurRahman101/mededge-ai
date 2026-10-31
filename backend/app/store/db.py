@@ -1,7 +1,7 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import UniqueConstraint, delete, func, inspect, text
+from sqlalchemy import UniqueConstraint, func, inspect, text
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from app.config import Settings
@@ -32,6 +32,7 @@ class RunRow(SQLModel, table=True):
     submission_key: str | None = None
     submission_digest: str | None = None
     archived: bool = False
+    trace_json: str | None = None
 
 
 class ChartConnection(SQLModel, table=True):
@@ -156,6 +157,9 @@ class Database:
         if "owner_id" not in {c["name"] for c in inspect(self.engine).get_columns("runrow")}:
             with self.engine.begin() as connection:
                 connection.execute(text("ALTER TABLE runrow ADD COLUMN owner_id VARCHAR"))
+        if "trace_json" not in {c["name"] for c in inspect(self.engine).get_columns("runrow")}:
+            with self.engine.begin() as connection:
+                connection.execute(text("ALTER TABLE runrow ADD COLUMN trace_json TEXT"))
         self.runs_dir = (BACKEND_DIR / settings.runs_dir).resolve()
         self.runs_dir.mkdir(parents=True, exist_ok=True)
 
@@ -211,15 +215,3 @@ class Database:
             session.add(SpendRow(day=datetime.now(UTC).date().isoformat(), usd=usd))
             session.commit()
 
-    def purge(self, hours: int = 24) -> None:
-        cutoff = datetime.now(UTC) - timedelta(hours=hours)
-        with self.session() as session:
-            rows = session.exec(select(RunRow)).all()
-            for row in rows:
-                created = row.created_at
-                if created.tzinfo is None:
-                    created = created.replace(tzinfo=UTC)
-                if created < cutoff:
-                    session.exec(delete(RunGrant).where(RunGrant.run_id == row.id))
-                    session.delete(row)
-            session.commit()

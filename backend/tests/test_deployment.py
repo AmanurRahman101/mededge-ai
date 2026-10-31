@@ -23,6 +23,18 @@ def test_production_rejects_unconfigured_email_and_database():
             pass
 
 
+def test_production_rejects_the_default_pseudonym_salt():
+    settings = Settings(
+        _env_file=None,
+        app_env="production",
+        app_base_url="https://mededge.example",
+        database_url="postgresql://u:p@localhost/db",
+    )
+    with pytest.raises(RuntimeError, match="PSEUDONYM_SALT"):
+        with TestClient(create_app(settings)):
+            pass
+
+
 def test_migration_keeps_legacy_rows_ownerless(tmp_path: Path):
     database = tmp_path / "legacy.db"
     with sqlite3.connect(database) as connection:
@@ -55,7 +67,7 @@ def test_migration_keeps_legacy_rows_ownerless(tmp_path: Path):
         ).fetchall()
         assert rows == [("old-a", None, None), ("old-b", None, None)]
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261030_amendment",
+            "20261101_trace",
         )
 
 
@@ -78,5 +90,5 @@ def test_migrations_prefer_direct_database_url(tmp_path: Path):
     assert not runtime_database.exists()
     with sqlite3.connect(migration_database) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261030_amendment",
+            "20261101_trace",
         )

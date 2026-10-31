@@ -15,8 +15,12 @@ from app.config import Settings
 from app.events import EventBus, EventKind, Stage
 from app.models.providers import ImagePart, ProviderError, TextPart
 from app.models.router import ModelRouter, NoProviderAvailable
-from app.pipeline.agent.loop import run_agent
-from app.pipeline.agent.prompts import ENCOUNTER_INSTRUCTIONS, EXTRACT_INSTRUCTIONS
+from app.pipeline.agent.loop import agent_target, run_agent
+from app.pipeline.agent.prompts import (
+    DICTATION_INSTRUCTIONS,
+    ENCOUNTER_INSTRUCTIONS,
+    EXTRACT_INSTRUCTIONS,
+)
 from app.pipeline.fallback_assembler import assemble
 from app.pipeline.ocr_anchors import identifier_boxes, read_text_boxes
 from app.pipeline.redact import redact
@@ -35,14 +39,28 @@ AGENT_USD = 0.08
 VOICE_USD = 0.01
 
 
-def validate_image_size(data: bytes) -> None:
-    with Image.open(io.BytesIO(data)) as original:
+TRACE_KEYS = {"used_fallback", "inject_fault", "turns", "tool", "hidden", "fell_back"}
+SAFE_ERRORS = ("Image is too large", "No speech", "Invalid input. Upload")
+ALLOWED_FORMATS = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
+
+
+def validate_image_size(data: bytes) -> str:
+    """Return the real MIME type from the decoded bytes; never trust the client's header."""
+    try:
+        original = Image.open(io.BytesIO(data))
+    except Exception:  # noqa: BLE001 - Pillow raises several types for bad input
+        raise ValueError("Invalid input. Upload a PNG, JPEG or WebP photo.") from None
+    with original:
+        mime = ALLOWED_FORMATS.get(original.format or "")
+        if mime is None:
+            raise ValueError("Invalid input. Upload a PNG, JPEG or WebP photo.")
         width, height = original.size
         if width * height > 3_000_000:
             raise ValueError(
                 "Image is too large to process on this server. Resize it to at most "
                 "3 megapixels and upload it again."
             )
+        return mime
 
 
 @dataclass
@@ -108,6 +126,29 @@ class Orchestrator:
                 if not connection or connection.status != "approved":
                     raise PermissionError("Patient access was revoked.")
 
+    def _save_trace(self, run_id: str) -> None:
+        """Keep a compact copy of the events; tool results carry no patient data."""
+        trace = [
+            {
+                "seq": event.seq,
+                "ts": event.ts.isoformat(),
+                "stage": event.stage.value,
+                "kind": event.kind.value,
+                "message": event.message[:300],
+                "model": event.model,
+                "latency_ms": event.latency_ms,
+                "data": {
+                    key: value
+                    for key, value in event.data.items()
+                    if key in TRACE_KEYS
+                },
+            }
+            for event in self.bus.history(run_id)
+            if event.stage != Stage.TRANSCRIBE or event.kind != EventKind.COMPLETED
+            or event.message.startswith("Recording")
+        ]
+        self.db.update(run_id, trace_json=json.dumps(trace))
+
     def confirm(self, run_id: str) -> bool:
         gate = self.gates.get(run_id)
         if gate is None:
@@ -132,7 +173,7 @@ class Orchestrator:
             elif isinstance(exc, ValueError):
                 message = (
                     str(exc)
-                    if str(exc).startswith(("Image is too large", "No speech"))
+                    if str(exc).startswith(SAFE_ERRORS)
                     else "Invalid input. Please check the report and recording."
                 )
             else:
@@ -144,6 +185,7 @@ class Orchestrator:
             ctx.image = b""
             self.gates.pop(run_id, None)
             if self.bus.exists(run_id):
+                self._save_trace(run_id)
                 self.bus.close(run_id)
             if on_done:
                 on_done()
@@ -174,7 +216,7 @@ class Orchestrator:
         async with self.image_gate:
             self._check_consent(ctx)
             # Reject large photos rather than silently reducing detail or exhausting the host.
-            validate_image_size(ctx.image)
+            ctx.mime = validate_image_size(ctx.image)
             image = ImagePart(ctx.image, ctx.mime)
             self.bus.publish(
                 run_id,
@@ -264,17 +306,12 @@ class Orchestrator:
             self.bus.publish(run_id, Stage.TRANSCRIBE, EventKind.COMPLETED, "Recording transcribed")
             self.bus.publish(
                 run_id, Stage.EXTRACT, EventKind.STARTED,
-                "Reading the report and preparing English and Bangla drafts",
+                "Reading the report and translating the dictation",
+                model=str(self.settings.chain("extractor")[0]),
             )
             combined = await self.router.structured(
                 "extractor",
-                instructions=(
-                    "Read the redacted report and the doctor's transcript. Produce English and "
-                    "Bengali drafts grounded only in those sources. Preserve names, numbers, "
-                    "units, and dose strings; identify conflicts and uncertain or unreadable "
-                    "details in unresolved. Clearly attribute spoken assessments to the doctor. "
-                    "Do not invent diagnoses or treatment. Both summaries require doctor review."
-                ),
+                instructions=DICTATION_INSTRUCTIONS,
                 parts=[
                     TextPart("Doctor transcript: " + transcript),
                     ImagePart(result.redacted_png, "image/png"),
@@ -288,9 +325,21 @@ class Orchestrator:
             extraction.medications = [
                 item for item in extraction.medications if not item.contains_identifier
             ]
-            encounter = EncounterFields()
-            bundle = assemble(extraction, encounter, row.pseudonym, {})
-            report = verify(bundle, extraction, set(), set())
+            encounter = await self._structure(run_id, transcript)
+            bundle, used_fallback, report, _ = await self._build_bundle(
+                run_id, extraction, encounter, row.pseudonym, ctx.inject_fault
+            )
+            if not report.ok and encounter.note:
+                # A dictated note that trips the policy check must not block the bundle.
+                encounter = EncounterFields(
+                    status=encounter.status, class_code=encounter.class_code,
+                    class_display=encounter.class_display,
+                )
+                bundle, codes, units = await self._fallback(
+                    extraction, encounter, row.pseudonym
+                )
+                used_fallback = True
+                report = verify(bundle, extraction, codes, units)
             with self.db.session() as session:
                 from sqlmodel import select
 
@@ -321,7 +370,8 @@ class Orchestrator:
                 current.document_type = extraction.document_type
                 current.encounter_json = encounter.model_dump_json()
                 current.bundle_json = json.dumps(bundle) if report.ok else None
-                current.used_fallback = True
+                current.used_fallback = used_fallback
+                current.inject_fault = ctx.inject_fault
                 current.extractor_model = str(combined.target)
                 current.status = "reviewing"
                 session.add(current)
@@ -367,23 +417,60 @@ class Orchestrator:
         )
 
         encounter, transcript = await self._encounter(run_id, ctx.audio)
+        bundle, used_fallback, report, _ = await self._build_bundle(
+            run_id, extraction, encounter, anon, ctx.inject_fault
+        )
+        self.db.update(
+            run_id,
+            status="reviewing",
+            document_type=extraction.document_type,
+            extraction_json=extraction.model_dump_json(),
+            encounter_json=encounter.model_dump_json(),
+            bundle_json=json.dumps(bundle),
+            transcript=transcript,
+            extractor_model=str(extracted.target),
+            used_fallback=used_fallback,
+            inject_fault=ctx.inject_fault,
+        )
+
+    async def _build_bundle(
+        self,
+        run_id: str,
+        extraction: Extraction,
+        encounter: EncounterFields,
+        anon: str,
+        inject_fault: bool,
+    ) -> tuple[dict, bool, object, str | None]:
+        """Let the Muse Spark agent build the bundle; fall back to local assembly if it cannot."""
+        target = agent_target(self.settings)
         self.db.add_spend(AGENT_USD)
         self.bus.publish(
             run_id,
             Stage.AGENT,
             EventKind.STARTED,
             "Building the FHIR bundle",
-            model="muse-spark-1.3",
+            model=str(target) if target else None,
         )
 
         def publish_tool(name: str, payload: dict, result: bool = False) -> None:
             kind = EventKind.TOOL_RESULT if result else EventKind.TOOL_CALL
-            summary = (
-                payload.get("term")
-                or payload.get("name")
-                or payload.get("unit_text")
-                or payload.get("ok")
-            )
+            if result and name == "submit_bundle":
+                errors = payload.get("errors") or []
+                first = errors[0] if errors else "invalid"
+                summary = "accepted" if payload.get("ok") else f"rejected: {first}"
+            else:
+                summary = (
+                    payload.get("term")
+                    or payload.get("name")
+                    or payload.get("unit_text")
+                    or payload.get("ok")
+                )
+                if result and payload.get("hits"):
+                    top = payload["hits"][0]
+                    found = top.get("code") or top.get("rxcui") or top.get("name")
+                    summary = f"{summary} -> {found}"
+                if result and payload.get("ucum"):
+                    summary = f"{summary} -> {payload['ucum']}"
             self.bus.publish(run_id, Stage.AGENT, kind, f"{name} {summary}", data={"tool": name})
 
         agent = await run_agent(
@@ -392,7 +479,7 @@ class Orchestrator:
             extraction,
             encounter,
             anon,
-            inject_fault=ctx.inject_fault,
+            inject_fault=inject_fault,
             publish=publish_tool,
         )
         used_fallback = False
@@ -403,7 +490,7 @@ class Orchestrator:
                 run_id,
                 Stage.AGENT,
                 EventKind.WARNING,
-                f"Agent stopped: {agent.error}. Assembling locally.",
+                "The agent did not return a valid bundle. Assembling locally.",
             )
             bundle = await self._adopt_fallback(agent, extraction, encounter, anon)
         report = verify(bundle, extraction, agent.state.allowed_loinc, agent.state.allowed_units)
@@ -421,20 +508,42 @@ class Orchestrator:
             Stage.VERIFY,
             EventKind.COMPLETED if report.ok else EventKind.WARNING,
             "Bundle valid, 0 errors" if report.ok else report.as_text(),
-            data={"used_fallback": used_fallback, "inject_fault": ctx.inject_fault},
+            data={
+                "used_fallback": used_fallback,
+                "inject_fault": inject_fault,
+                "turns": agent.turns,
+                "layers": ["schema", "references", "terminology", "fidelity", "policy"],
+            },
         )
-        self.db.update(
+        return bundle, used_fallback, report, str(agent.target)
+
+    async def _structure(self, run_id: str, transcript: str) -> EncounterFields:
+        if not transcript.strip():
+            return EncounterFields()
+        try:
+            structured = await self.router.structured(
+                "structurer",
+                instructions=ENCOUNTER_INSTRUCTIONS,
+                parts=[TextPart(transcript)],
+                schema=EncounterFields,
+            )
+        except NoProviderAvailable as exc:
+            self.bus.publish(run_id, Stage.STRUCTURE, EventKind.WARNING, str(exc))
+            return EncounterFields(note=transcript)
+        except Exception:  # noqa: BLE001 - the bundle can be built without encounter fields
+            self.bus.publish(
+                run_id, Stage.STRUCTURE, EventKind.WARNING, "Visit fields unavailable."
+            )
+            return EncounterFields()
+        self.bus.publish(
             run_id,
-            status="reviewing",
-            document_type=extraction.document_type,
-            extraction_json=extraction.model_dump_json(),
-            encounter_json=encounter.model_dump_json(),
-            bundle_json=json.dumps(bundle),
-            transcript=transcript,
-            extractor_model=str(extracted.target),
-            used_fallback=used_fallback,
-            inject_fault=ctx.inject_fault,
+            Stage.STRUCTURE,
+            EventKind.COMPLETED,
+            f"{structured.value.class_code} {structured.value.status}",
+            model=str(structured.target),
+            latency_ms=structured.latency_ms,
         )
+        return structured.value
 
     async def _encounter(
         self, run_id: str, audio: bytes | None
@@ -465,25 +574,7 @@ class Orchestrator:
         )
         if not transcript.strip():
             return EncounterFields(), transcript
-        try:
-            structured = await self.router.structured(
-                "structurer",
-                instructions=ENCOUNTER_INSTRUCTIONS,
-                parts=[TextPart(transcript)],
-                schema=EncounterFields,
-            )
-        except NoProviderAvailable as exc:
-            self.bus.publish(run_id, Stage.STRUCTURE, EventKind.WARNING, str(exc))
-            return EncounterFields(note=transcript), transcript
-        self.bus.publish(
-            run_id,
-            Stage.STRUCTURE,
-            EventKind.COMPLETED,
-            f"{structured.value.class_code} {structured.value.status}",
-            model=str(structured.target),
-            latency_ms=structured.latency_ms,
-        )
-        return structured.value, transcript
+        return await self._structure(run_id, transcript), transcript
 
     async def _adopt_fallback(
         self, agent, extraction: Extraction, encounter: EncounterFields, anon: str

@@ -155,16 +155,17 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
                 connection.status = "revoked"
                 session.add(connection)
                 session.commit()
-        return {"transcript": "No diabetes. Take 1+0+1."}
+        return {"transcript": "Outpatient visit, fasting specimen, route to nephrology."}
 
     async def fake_structured(role, *, instructions, parts, schema):
+        if schema is not ConsultationDraft:
+            raise RuntimeError("visit fields unavailable in this test")
         seen.append(parts)
-        assert schema is ConsultationDraft
         return SimpleNamespace(
             value=ConsultationDraft(
                 extraction=Extraction(document_type="prescription"),
-                summary_en="No diabetes. Take 1+0+1.",
-                summary_bn="ডায়াবেটিস নেই। 1+0+1।",
+                summary_en="Outpatient visit, fasting specimen, route to nephrology.",
+                summary_bn="বহির্বিভাগ ভিজিট, উপবাসে নমুনা, নেফ্রোলজিতে পাঠান।",
                 unresolved=[],
             ),
             target="meta:test",
@@ -189,14 +190,14 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
             assert len(seen) == 1
             assert any(isinstance(part, ImagePart) for part in seen[0])
             assert any(
-                isinstance(part, TextPart) and "No diabetes" in part.text for part in seen[0]
+                isinstance(part, TextPart) and "fasting specimen" in part.text for part in seen[0]
             )
             assert len(drafts) == 1 and drafts[0].status == "draft"
             assert drafts[0].summary_bn and drafts[0].summary_en
             assert db.get("combo").status == "reviewing"
             messages = [event.message for event in bus.history("combo")]
             assert "Transcribing the doctor's recording" in messages
-            assert "Reading the report and preparing English and Bangla drafts" in messages
+            assert "Reading the report and translating the dictation" in messages
             assert "Draft ready for doctor review" in messages
     assert ctx.audio is None and ctx.image == b""
 

@@ -18,7 +18,6 @@ dependencies = [
   "fhir.resources>=8.0",
   "sqlmodel>=0.0.22",
   "slowapi>=0.1.9",
-  "websockets>=13",
   "pwdlib[argon2]>=0.2",
   "email-validator>=2.2",
   "psycopg[binary]>=3.2",

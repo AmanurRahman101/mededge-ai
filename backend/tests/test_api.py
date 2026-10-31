@@ -21,7 +21,7 @@ def test_health_reports_roles_without_leaking_the_key():
     assert response.status_code == 200
     assert SECRET not in response.text
     data = response.json()
-    assert data["meta_key_present"] is True
+    assert "meta_key_present" not in data and "budget" not in data
     assert data["roles"]["extractor"] == [{"target": "meta:muse-spark-1.3", "configured": True}]
     assert data["sam"] == {"provider": "meta", "model": "sam-3.1"}
 

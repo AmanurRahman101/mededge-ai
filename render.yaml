@@ -26,3 +26,12 @@ services:
         value: "8"
       - key: ENABLE_DEV_ROUTES
         value: "false"
+      # Judge demo logins. Leave password empty to disable the demo accounts.
+      - key: DEMO_PATIENT_EMAIL
+        value: demo.patient@example.com
+      - key: DEMO_DOCTOR_EMAIL
+        value: demo.doctor@example.com
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: PSEUDONYM_SALT
+        sync: false
