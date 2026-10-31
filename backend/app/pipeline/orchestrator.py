@@ -251,6 +251,9 @@ class Orchestrator:
         row = self.db.get(run_id)
         if row and row.submitted_by and row.owner_id != row.submitted_by and ctx.audio:
             self._check_consent(ctx)
+            self.bus.publish(
+                run_id, Stage.TRANSCRIBE, EventKind.STARTED, "Transcribing the doctor's recording"
+            )
             voice = await transcribe_wav(self.http, self.settings, ctx.audio)
             ctx.audio = None
             self.db.add_spend(VOICE_USD)
@@ -258,6 +261,11 @@ class Orchestrator:
             if not transcript:
                 raise ValueError("No speech detected; submit the recording again.")
             self._check_consent(ctx)
+            self.bus.publish(run_id, Stage.TRANSCRIBE, EventKind.COMPLETED, "Recording transcribed")
+            self.bus.publish(
+                run_id, Stage.EXTRACT, EventKind.STARTED,
+                "Reading the report and preparing English and Bangla drafts",
+            )
             combined = await self.router.structured(
                 "extractor",
                 instructions=(

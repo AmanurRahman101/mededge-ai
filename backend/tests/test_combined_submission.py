@@ -194,6 +194,10 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
             assert len(drafts) == 1 and drafts[0].status == "draft"
             assert drafts[0].summary_bn and drafts[0].summary_en
             assert db.get("combo").status == "reviewing"
+            messages = [event.message for event in bus.history("combo")]
+            assert "Transcribing the doctor's recording" in messages
+            assert "Reading the report and preparing English and Bangla drafts" in messages
+            assert "Draft ready for doctor review" in messages
     assert ctx.audio is None and ctx.image == b""
 
 

@@ -6,6 +6,7 @@ import React from "react";
 
 const require = createRequire(import.meta.url);
 const fixture = { status: "reviewing", pseudonym: "TEST", extraction: { rows: [], medications: [], advised_tests: [{ raw_name: "CRP" }, { raw_name: "RBS" }] } };
+globalThis.__runFixture = fixture;
 const plugin = {
   name: "test-workspace",
   setup(build) {
@@ -16,7 +17,7 @@ const plugin = {
       if (args.path.endsWith(".css")) return { contents: "", loader: "js" };
       if (args.path === "icons") return { contents: "exports.Microphone = () => null; exports.Stop = () => null;", loader: "js" };
       if (args.path === "./store") return { contents: "exports.useApp = selector => selector({ setScreen() {} });", loader: "js" };
-      if (args.path === "./useRun") return { contents: `exports.useRun = () => ({run: ${JSON.stringify(fixture)}, events: [], error: null});`, loader: "js" };
+      if (args.path === "./useRun") return { contents: "exports.useRun = () => ({run: globalThis.__runFixture, events: [], error: null});", loader: "js" };
       return { contents: 'exports.apiBase = ""; exports.listCases = async () => [];', loader: "js" };
     });
   }
@@ -39,4 +40,16 @@ const doctorHtml = renderToStaticMarkup(React.createElement(doctorModule.exports
 assert.match(doctorHtml, /CRP/, "Doctor result must show extracted advised tests");
 assert.match(doctorHtml, /RBS/, "Doctor result must show every extracted advised test");
 assert.match(doctorHtml, /approved export includes them as draft requests/);
+globalThis.__runFixture = { ...fixture, status: "queued", overlay_url: "/overlay.png", extraction: null };
+const queuedHtml = renderToStaticMarkup(React.createElement(doctorModule.exports.Doctor));
+assert.doesNotMatch(queuedHtml, /\/overlay\.png/, "Do not request an overlay before it has been prepared");
+assert.match(queuedHtml, /Preparing/, "Queued reports should explain that the preview is being prepared");
+globalThis.__runFixture = { ...fixture, status: "awaiting_confirmation", overlay_url: "/overlay.png", extraction: null };
+const waitingHtml = renderToStaticMarkup(React.createElement(doctorModule.exports.Doctor));
+assert.match(waitingHtml, /src="\/overlay\.png"/, "The preview appears when redaction is ready");
+assert.match(waitingHtml, /<button class="primary" disabled="">Confirm redaction<\/button>/, "Confirmation waits for the image to load");
+globalThis.__runFixture = { ...fixture, status: "processing", overlay_url: "/overlay.png", extraction: null };
+const processingHtml = renderToStaticMarkup(React.createElement(doctorModule.exports.Doctor));
+assert.match(processingHtml, /Verify and publish/, "Explain how to publish the draft after processing");
+assert.match(processingHtml, /patient&#x27;s record and chart history/, "Explain where the published note appears");
 console.log("Patient and doctor results show extracted advised tests");
