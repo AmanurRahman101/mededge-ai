@@ -54,6 +54,8 @@ export interface Run {
   share_code: string | null;
   overlay_url: string;
   redacted_url: string;
+  original_available?: boolean;
+  audio_available?: boolean;
 }
 
 export interface PipelineEvent {

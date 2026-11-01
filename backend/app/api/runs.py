@@ -24,6 +24,7 @@ from app.pipeline.schemas import EncounterFields, Extraction, LabRow, LoincHit, 
 from app.pipeline.terminology import search_loinc
 from app.pipeline.verify import verify
 from app.store.db import ChartConnection, Database, RunRow
+from app.store.object_storage import StorageError
 
 router = APIRouter()
 FILES = {"overlay.png", "redacted.png", "table.png"}
@@ -98,11 +99,21 @@ async def create_run(
         if source.owner_id != patient_id:
             raise HTTPException(404, "Source record not found.")
         path = _db(request).runs_dir / source_run_id / "redacted.png"
-        if not path.is_file():
+        if path.is_file():
+            if path.stat().st_size > MAX_IMAGE_BYTES:
+                raise HTTPException(413, "The source image exceeds the 12 MB limit.")
+            image_bytes = path.read_bytes()
+        elif request.app.state.object_storage:
+            try:
+                image_bytes, _ = await asyncio.to_thread(
+                    request.app.state.object_storage.get, source_run_id, "redacted"
+                )
+            except StorageError:
+                raise HTTPException(
+                    409, "Source image unavailable. Upload a report image."
+                ) from None
+        else:
             raise HTTPException(409, "Source image unavailable. Upload a report image.")
-        if path.stat().st_size > MAX_IMAGE_BYTES:
-            raise HTTPException(413, "The source image exceeds the 12 MB limit.")
-        image_bytes = path.read_bytes()
         mime = "image/png"
         auto_confirm = False
     if not image_bytes:
@@ -157,6 +168,20 @@ async def create_run(
         raise HTTPException(429, "The service is busy. Please retry shortly.")
     run_id = new_run_id()
     anon = pseudonym_for(run_id, request.app.state.settings.pseudonym_salt)
+    storage = request.app.state.object_storage
+    if not case_id and storage is None and request.app.state.settings.app_env == "production":
+        raise HTTPException(503, "Permanent file storage is not configured.")
+    if not case_id and storage:
+        try:
+            await asyncio.to_thread(storage.put, run_id, "original", image_bytes, mime)
+            if audio_bytes:
+                await asyncio.to_thread(storage.put, run_id, "audio", audio_bytes, "audio/wav")
+        except StorageError:
+            try:
+                await asyncio.to_thread(storage.delete_record, run_id)
+            except StorageError:
+                pass
+            raise HTTPException(503, "Could not save the uploaded files. Please retry.") from None
     try:
         with db.session() as session:
             if submission_digest:
@@ -185,6 +210,8 @@ async def create_run(
             )
             session.commit()
     except IntegrityError:
+        if not case_id and storage:
+            await asyncio.to_thread(storage.delete_record, run_id)
         with db.session() as session:
             previous = session.exec(
                 select(RunRow).where(
@@ -198,6 +225,13 @@ async def create_run(
                     "events_url": f"/api/runs/{previous.id}/events",
                 }
         raise HTTPException(409, "Submission key was already used for different content.") from None
+    except Exception:
+        if not case_id and storage:
+            try:
+                await asyncio.to_thread(storage.delete_record, run_id)
+            except StorageError:
+                pass
+        raise
     bus: EventBus = request.app.state.bus
     bus.open(run_id)
     ctx = RunContext(
@@ -217,16 +251,60 @@ async def get_run(run_id: str, request: Request) -> dict:
     row = _row_or_404(request, run_id)
     result = _public(row)
     result["source_available"] = (_db(request).runs_dir / run_id / "redacted.png").is_file()
+    result["original_available"] = False
+    result["audio_available"] = False
+    storage = request.app.state.object_storage
+    if storage:
+        try:
+            result["source_available"] = result["source_available"] or await asyncio.to_thread(
+                storage.exists, run_id, "redacted"
+            )
+            result["original_available"] = await asyncio.to_thread(
+                storage.exists, run_id, "original"
+            )
+            result["audio_available"] = await asyncio.to_thread(storage.exists, run_id, "audio")
+        except StorageError:
+            raise HTTPException(503, "Could not check stored files. Please retry.") from None
     return result
 
 
 @router.get("/api/runs/{run_id}/files/{name}")
 async def run_file(run_id: str, name: str, request: Request) -> Response:
+    private_names = {"original": "original", "audio": "audio"}
+    if name in private_names:
+        _row_or_404(request, run_id)
+        storage = request.app.state.object_storage
+        if not storage:
+            raise HTTPException(404, "File unavailable")
+        try:
+            data, mime = await asyncio.to_thread(storage.get, run_id, private_names[name])
+        except StorageError:
+            raise HTTPException(404, "File unavailable") from None
+        return Response(
+            content=data,
+            media_type=mime,
+            headers={
+                "Cache-Control": "no-store",
+                "X-Content-Type-Options": "nosniff",
+                "Content-Disposition": "inline" if name == "audio" else "attachment",
+            },
+        )
     if name not in FILES:
         raise HTTPException(status_code=404, detail="Unknown file")
     _row_or_404(request, run_id)
     path = request.app.state.db.runs_dir / run_id / name
     if not path.is_file():
+        storage = request.app.state.object_storage
+        if storage:
+            try:
+                data, mime = await asyncio.to_thread(storage.get, run_id, name.removesuffix(".png"))
+                return Response(
+                    content=data,
+                    media_type=mime,
+                    headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+                )
+            except StorageError:
+                pass
         raise HTTPException(status_code=404, detail="File not ready")
     return Response(
         content=path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-store"}

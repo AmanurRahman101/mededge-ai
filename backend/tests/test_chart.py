@@ -88,7 +88,7 @@ def test_connection_requires_patient_approval_and_revocation_blocks_access(reque
     assert (
         client.post(
             "/api/chart/connections/doctor/decision",
-            json={"approve": True, "consent_version": "chart-access-v1"},
+            json={"approve": True, "consent_version": "chart-access-v2"},
         ).status_code
         == 200
     )

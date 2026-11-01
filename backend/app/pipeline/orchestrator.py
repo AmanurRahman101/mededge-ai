@@ -137,14 +137,11 @@ class Orchestrator:
                 "message": event.message[:300],
                 "model": event.model,
                 "latency_ms": event.latency_ms,
-                "data": {
-                    key: value
-                    for key, value in event.data.items()
-                    if key in TRACE_KEYS
-                },
+                "data": {key: value for key, value in event.data.items() if key in TRACE_KEYS},
             }
             for event in self.bus.history(run_id)
-            if event.stage != Stage.TRANSCRIBE or event.kind != EventKind.COMPLETED
+            if event.stage != Stage.TRANSCRIBE
+            or event.kind != EventKind.COMPLETED
             or event.message.startswith("Recording")
         ]
         self.db.update(run_id, trace_json=json.dumps(trace))
@@ -259,6 +256,17 @@ class Orchestrator:
             folder.mkdir(parents=True, exist_ok=True)
             (folder / "redacted.png").write_bytes(result.redacted_png)
             (folder / "overlay.png").write_bytes(result.overlay_png)
+            if getattr(self, "storage", None) and not ctx.case_id:
+                await asyncio.to_thread(
+                    self.storage.put, run_id, "redacted", result.redacted_png, "image/png"
+                )
+                await asyncio.to_thread(
+                    self.storage.put, run_id, "overlay", result.overlay_png, "image/png"
+                )
+                if result.table_png:
+                    await asyncio.to_thread(
+                        self.storage.put, run_id, "table", result.table_png, "image/png"
+                    )
             if result.table_png:
                 (folder / "table.png").write_bytes(result.table_png)
             self.db.update(run_id, status="awaiting_confirmation")
@@ -305,7 +313,9 @@ class Orchestrator:
             self._check_consent(ctx)
             self.bus.publish(run_id, Stage.TRANSCRIBE, EventKind.COMPLETED, "Recording transcribed")
             self.bus.publish(
-                run_id, Stage.EXTRACT, EventKind.STARTED,
+                run_id,
+                Stage.EXTRACT,
+                EventKind.STARTED,
                 "Reading the report and translating the dictation",
                 model=str(self.settings.chain("extractor")[0]),
             )
@@ -332,12 +342,11 @@ class Orchestrator:
             if not report.ok and encounter.note:
                 # A dictated note that trips the policy check must not block the bundle.
                 encounter = EncounterFields(
-                    status=encounter.status, class_code=encounter.class_code,
+                    status=encounter.status,
+                    class_code=encounter.class_code,
                     class_display=encounter.class_display,
                 )
-                bundle, codes, units = await self._fallback(
-                    extraction, encounter, row.pseudonym
-                )
+                bundle, codes, units = await self._fallback(extraction, encounter, row.pseudonym)
                 used_fallback = True
                 report = verify(bundle, extraction, codes, units)
             with self.db.session() as session:

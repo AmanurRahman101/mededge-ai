@@ -128,7 +128,7 @@ Role routing is set in `.env`, for example `ROLE_EXTRACTOR=glimmer:muse-glimmer,
 
 In production the app refuses to start without PostgreSQL, an HTTPS app URL, a Resend sender, and a real salt. It sends HSTS and a same-origin Content Security Policy. Dev routes stay off, and a daily budget (`DAILY_BUDGET_USD`) limits new model calls.
 
-Render free services sleep, and their filesystem is ephemeral. Accounts persist in Neon, but uploaded images do not survive a restart. The demo accounts are reseeded at every startup, so they recover. For judging week, consider a paid instance with a disk so there is no cold start.
+Render free services sleep, and their filesystem is ephemeral. Real uploads require configured private S3-compatible storage: set STORAGE_BUCKET, STORAGE_ENDPOINT, STORAGE_REGION, STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY. Original images, audio and redacted previews are stored privately until the patient deletes the record. Legacy files may no longer be available. The demo accounts are reseeded at startup. For judging week, consider a paid instance to avoid cold starts.
 
 Render deploys a Git commit, not uncommitted files. Point the service at `main`.
 

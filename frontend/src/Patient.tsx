@@ -89,7 +89,7 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
       </button>
       <h1 style={{ marginTop: 24 }}>{runId ? "Your report" : "Add a report"}</h1>
       {!runId && <p className="lede">
-        Your image is sent to Meta to locate page regions. Review the redaction preview before the redacted page is sent for reading.
+        Your report image is stored in your chart until you delete the record. Your image is sent to Meta to locate page regions. Review the redaction preview before the redacted page is sent for reading.
       </p>}
 
       {!runId && (
@@ -141,6 +141,7 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
 
       {run && ready && run.extraction && (
         <div className="stack">
+          {(run.original_available || run.audio_available) && <section><h2>Original files</h2>{run.original_available && <p><a href={`${apiBase}/api/runs/${encodeURIComponent(run.run_id)}/files/original`}>Download original image</a></p>}{run.audio_available && <><p>Doctor’s recording</p><audio controls preload="none" src={`${apiBase}/api/runs/${encodeURIComponent(run.run_id)}/files/audio`} /></>}</section>}
           <section className="source-preview"><h2>Source preview</h2>
             {imageUnavailable ? <p className="lede">Source image unavailable. Your saved reading remains below.</p> : <img src={`${apiBase}${run.redacted_url}`} alt="Redacted source report" onError={() => setImageUnavailable(true)} />}
           </section>

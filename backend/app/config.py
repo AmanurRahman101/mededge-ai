@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///var/mededge.db"
     database_url_unpooled: str = ""
     runs_dir: str = "var/runs"
+    storage_bucket: str = ""
+    storage_endpoint: str = ""
+    storage_region: str = ""
+    storage_access_key: SecretStr | None = None
+    storage_secret_key: SecretStr | None = None
     hapi_base_url: str = "https://hapi.fhir.org/baseR4"
     rate_limit: str = "30/minute"
     pseudonym_salt: str = "mededge"

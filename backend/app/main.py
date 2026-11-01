@@ -19,6 +19,7 @@ from app.limit import limiter
 from app.models.router import ModelRouter
 from app.pipeline.orchestrator import Orchestrator
 from app.store.db import Database, RunRow
+from app.store.object_storage import configured_storage
 
 
 @asynccontextmanager
@@ -36,7 +37,9 @@ async def lifespan(app: FastAPI):
             or public_url.fragment
         ):
             raise RuntimeError("Production requires an HTTPS APP_BASE_URL origin.")
-        if not settings.database_url.startswith(("postgres://", "postgresql://", "postgresql+psycopg://")):
+        if not settings.database_url.startswith(
+            ("postgres://", "postgresql://", "postgresql+psycopg://")
+        ):
             raise RuntimeError("Production requires a PostgreSQL DATABASE_URL.")
         salt = settings.pseudonym_salt
         if salt in ("", "mededge", "change-me") or len(salt) < 16:
@@ -52,6 +55,7 @@ async def lifespan(app: FastAPI):
         app.state.http = http
         app.state.router = ModelRouter(settings, http)
         app.state.db = Database(settings)
+        app.state.object_storage = configured_storage(settings)
         # In-process jobs and confirmation gates do not survive a restart.
         with app.state.db.session() as session:
             session.exec(
@@ -63,6 +67,7 @@ async def lifespan(app: FastAPI):
         app.state.orchestrator = Orchestrator(
             settings, http, app.state.router, app.state.bus, app.state.db
         )
+        app.state.orchestrator.storage = app.state.object_storage
         await asyncio.to_thread(demo.reset, app.state.db, settings)
         reset_task = asyncio.create_task(demo.reset_loop(app.state.db, settings))
         try:
@@ -98,7 +103,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ):
             return JSONResponse(status_code=404, content={"detail": "Not found"})
         if request.url.path.startswith("/api/") and request.method in {
-            "POST", "PUT", "PATCH", "DELETE"
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
         }:
             try:
                 verify_request(request)
@@ -158,6 +166,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 frontend_dir / "index.html",
                 headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
             )
+
     return app
 
 

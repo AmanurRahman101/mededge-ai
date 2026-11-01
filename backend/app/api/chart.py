@@ -28,12 +28,13 @@ from app.store.db import (
 )
 
 router = APIRouter(prefix="/api/chart", tags=["chart"])
-CONSENT_VERSION = "chart-access-v1"
+CONSENT_VERSION = "chart-access-v2"
 ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CONSENT_SCOPE = "whole_chart,contribute,review,approve,download,meta_image_voice"
 CONSENT_TEXT = (
     "I allow this doctor to access my entire patient history, including future records, "
     "and to upload, review, approve and download records until I revoke access. "
+    "Original reports and voice recordings are stored in the patient chart until deletion. "
     "Images and voice may be sent to Meta for processing. Downloaded information "
     "cannot be recalled. Doctor accounts are self-declared, not credential-verified."
 )
@@ -43,6 +44,20 @@ def active_connection(db, patient_id: str, doctor_id: str) -> bool:
     with db.session() as session:
         connection = session.get(ChartConnection, (patient_id, doctor_id))
         return bool(connection and connection.status == "approved")
+
+
+def source_available(request: Request, run_id: str) -> bool:
+    if (request.app.state.db.runs_dir / run_id / "redacted.png").is_file():
+        return True
+    storage = request.app.state.object_storage
+    if not storage:
+        return False
+    from app.store.object_storage import StorageError
+
+    try:
+        return storage.exists(run_id, "redacted")
+    except StorageError:
+        raise HTTPException(503, "Could not check stored files. Please retry.") from None
 
 
 def activity(session, patient_id: str, actor_id: str, action: str, run_id: str | None = None):
@@ -353,9 +368,7 @@ def records(
                     "created_at": r.created_at.isoformat(),
                     "submitted_by": r.submitted_by,
                     "archived": r.archived,
-                    "source_available": (
-                        request.app.state.db.runs_dir / r.id / "redacted.png"
-                    ).is_file(),
+                    "source_available": source_available(request, r.id),
                 }
                 for r in rows[:limit]
             ],
@@ -453,9 +466,7 @@ def patient_overview(patient_id: str, request: Request, offset: int = 0, limit: 
                     "document_type": row.document_type,
                     "created_at": row.created_at.isoformat(),
                     "archived": row.archived,
-                    "source_available": (
-                        request.app.state.db.runs_dir / row.id / "redacted.png"
-                    ).is_file(),
+                    "source_available": source_available(request, row.id),
                     "medications": readings("medications", "raw_text"),
                     "tests": readings("advised_tests", "raw_name"),
                     "lab_rows": lab_rows,
@@ -538,6 +549,13 @@ def delete_record(run_id: str, request: Request):
             raise HTTPException(404, "Record not found.")
         if row.status not in {"reviewing", "approved", "exported", "failed", "interrupted"}:
             raise HTTPException(409, "Wait for processing to finish before deleting this record.")
+        if request.app.state.object_storage:
+            from app.store.object_storage import StorageError
+
+            try:
+                request.app.state.object_storage.delete_record(run_id)
+            except StorageError:
+                raise HTTPException(503, "Could not delete stored files. Try again.") from None
         # Never follow unexpected paths or symlinks while cleaning temporary files.
         if re.fullmatch(r"[A-Za-z0-9_-]{1,128}", run_id):
             root = db.runs_dir.resolve()
