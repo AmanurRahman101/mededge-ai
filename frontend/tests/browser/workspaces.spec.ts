@@ -27,7 +27,7 @@ test("doctor workspace: modular desktop/mobile, both themes, source and editable
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/doctor");
-  await page.getByRole("button", { name: "Nadia (fictional)" }).click();
+  await page.getByRole("button", { name: /Nadia \(fictional\)/ }).click();
   await expect(
     page.getByRole("heading", { name: "Verified history at a glance" }),
   ).toBeVisible();
@@ -61,7 +61,7 @@ test("doctor workspace: modular desktop/mobile, both themes, source and editable
     }
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.getByRole("button", { name: "History", exact: true }).click();
+  await page.getByRole("button", { name: "Reports & history", exact: true }).click();
   await expect(
     page.getByRole("button", { name: /Today's visit/ }),
   ).toBeVisible();
@@ -108,7 +108,7 @@ test("doctor workspace: modular desktop/mobile, both themes, source and editable
     page.getByRole("heading", { name: "Published note", exact: true }),
   ).toBeVisible();
   await page.goto("/doctor");
-  await page.getByRole("button", { name: "Nadia (fictional)" }).click();
+  await page.getByRole("button", { name: /Nadia \(fictional\)/ }).click();
   await expect(page.locator(".digest-sections")).toContainText(
     "symptoms resolved",
   );

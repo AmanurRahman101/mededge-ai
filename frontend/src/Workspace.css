@@ -874,3 +874,15 @@ html.dark {
   .record-workspace > .module-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; }
   .record-workspace > .module-tabs button { white-space: normal; text-align: left; padding-inline: 8px; line-height: 1.4; }
 }
+
+.doctor-workspace .workspace-grid { display: block; }
+.doctor-workspace .patient-list-open .chart-workspace, .doctor-workspace .chart-open .patient-sidebar { display: none; }
+.doctor-workspace .patient-sidebar { position: static; border: 0; padding: 0; }
+.doctor-workspace .search-label { max-width: 420px; }
+.doctor-workspace .patient-directory { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 14px; margin-top: 22px; overflow: visible; }
+.doctor-workspace .patient-choice { min-height: 160px; align-items: flex-start; padding: 20px; border: 1px solid var(--line); background: var(--surface); }
+.doctor-workspace .patient-choice:hover { border-color: var(--accent); }
+.doctor-workspace .patient-choice > span { display: flex; flex-direction: column; gap: 6px; }
+.doctor-workspace .patient-preview { font-size: 13px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
+.doctor-workspace .patient-open-label { font-size: 13px; color: var(--accent); font-weight: 600; margin-top: 6px; }
+.chart-back { margin-bottom: 20px; }

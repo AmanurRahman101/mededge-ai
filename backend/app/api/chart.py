@@ -1,6 +1,7 @@
 """Patient-controlled chart connections and history."""
 
 import asyncio
+import hashlib
 import json
 import re
 import secrets
@@ -21,6 +22,7 @@ from app.store.db import (
     AuthUser,
     ChartActivity,
     ChartConnection,
+    ChartDigest,
     ClinicalSummary,
     ConnectionCode,
     ConsentEvent,
@@ -183,6 +185,49 @@ def connections(request: Request):
             else ChartConnection.doctor_id == user.id
         )
         rows = session.exec(select(ChartConnection).where(condition)).all()
+        previews = {}
+        patient_summaries = {}
+        if user.role == "doctor":
+            approved_ids = [row.patient_id for row in rows if row.status == "approved"]
+            if approved_ids:
+                notes = session.exec(
+                    select(ClinicalSummary, RunRow.owner_id)
+                    .join(RunRow, ClinicalSummary.run_id == RunRow.id)
+                    .where(RunRow.owner_id.in_(approved_ids), ClinicalSummary.status == "published")
+                    .order_by(ClinicalSummary.published_at.desc(), ClinicalSummary.id.desc())
+                ).all()
+                replaced = {note.amends_id for note, _ in notes if note.amends_id}
+                for note, owner in notes:
+                    if note.id not in replaced and owner not in previews:
+                        previews[owner] = note.summary_en[:240]
+                cached = session.exec(
+                    select(ChartDigest).where(ChartDigest.patient_id.in_(approved_ids))
+                ).all()
+                for digest_row in cached:
+                    source = [
+                        {
+                            "id": n.id,
+                            "record_id": n.run_id,
+                            "date": n.published_at.isoformat() if n.published_at else None,
+                            "english": n.summary_en,
+                            "bangla": n.summary_bn,
+                        }
+                        for n, owner in reversed(notes)
+                        if owner == digest_row.patient_id and n.id not in replaced
+                    ]
+                    fingerprint = hashlib.sha256(
+                        json.dumps(source, ensure_ascii=False, sort_keys=True).encode()
+                    ).hexdigest()
+                    if digest_row.status == "ready" and digest_row.fingerprint == fingerprint:
+                        try:
+                            items = json.loads(digest_row.items_json)
+                            text = " ".join(
+                                item.get("text_en", "") for item in items if isinstance(item, dict)
+                            )
+                            if text.strip():
+                                patient_summaries[digest_row.patient_id] = text[:240]
+                        except (TypeError, ValueError):
+                            pass
         result = []
         for row in rows:
             other_id = row.doctor_id if user.role == "patient" else row.patient_id
@@ -192,6 +237,12 @@ def connections(request: Request):
             result.append(
                 {
                     "patient_id": row.patient_id if visible else None,
+                    "patient_summary": patient_summaries.get(row.patient_id)
+                    if user.role == "doctor" and row.status == "approved"
+                    else None,
+                    "latest_note_preview": previews.get(row.patient_id)
+                    if user.role == "doctor" and row.status == "approved"
+                    else None,
                     "doctor_id": row.doctor_id,
                     "request_id": row.request_id,
                     "status": row.status,

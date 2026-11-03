@@ -257,3 +257,50 @@ def test_history_without_source_checks_remains_available_on_storage_outage(reque
     connection(c)
     sign_in(c, "doctor")
     assert c.get("/api/chart/patients/patient1/overview?include_source=false").status_code == 200
+
+
+def test_patient_card_preview_requires_approved_connection_and_uses_latest_amendment(request):
+    c = request.getfixturevalue("chart_client")
+    note(c)
+    note(c, "corrected", amends_id="note", summary_en="Corrected published assessment")
+    note(c, "private-draft", status="draft", summary_en="Private draft")
+    connection(c, "pending")
+    sign_in(c, "doctor")
+    assert c.get("/api/chart/connections").json()["connections"][0]["latest_note_preview"] is None
+    connection(c, "approved")
+    assert (
+        c.get("/api/chart/connections").json()["connections"][0]["latest_note_preview"]
+        == "Corrected published assessment"
+    )
+    connection(c, "revoked")
+    assert c.get("/api/chart/connections").json()["connections"][0]["latest_note_preview"] is None
+
+
+async def test_patient_card_uses_fresh_cached_full_summary(request):
+    c = request.getfixturevalue("chart_client")
+    note(c)
+    connection(c)
+
+    async def provider(*args, **kwargs):
+        return SimpleNamespace(
+            value=DigestResult(
+                items=[
+                    DigestItem(
+                        category="assessment",
+                        text_en="Combined verified history",
+                        text_bn="ইতিহাস",
+                        source_ids=["note"],
+                    )
+                ]
+            )
+        )
+
+    c.app.state.router.structured = provider
+    await ensure_digest(c.app, "patient1")
+    sign_in(c, "doctor")
+    assert (
+        c.get("/api/chart/connections").json()["connections"][0]["patient_summary"]
+        == "Combined verified history"
+    )
+    note(c, "new-note")
+    assert c.get("/api/chart/connections").json()["connections"][0]["patient_summary"] is None

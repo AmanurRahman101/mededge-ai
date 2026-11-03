@@ -31,6 +31,8 @@ import "./Doctor.css";
 
 type Connection = {
   patient_id: string | null;
+  latest_note_preview: string | null;
+  patient_summary: string | null;
   request_id: string;
   status: string;
   name: string | null;
@@ -562,7 +564,7 @@ export function Doctor({
             </form>
           </section>
         )}
-        <div className="workspace-grid">
+        <div className={`workspace-grid ${selectedPatient ? "chart-open" : "patient-list-open"}`}>
           <aside className="patient-sidebar">
             <div className="module-heading">
               <h2>My patients</h2>
@@ -619,6 +621,8 @@ export function Doctor({
                     <span>
                       <strong>{c.name || "Patient"}</strong>
                       <small>{c.email}</small>
+                      <span className="patient-preview">{c.patient_summary ? `Patient summary: ${c.patient_summary}` : c.latest_note_preview ? `Latest published note: ${c.latest_note_preview}` : "No published note yet"}</span>
+                      <span className="patient-open-label">Open patient chart →</span>
                     </span>
                   </button>
                 ))}
@@ -656,6 +660,7 @@ export function Doctor({
               </div>
             ) : (
               <>
+                <button className="back-link chart-back" type="button" onClick={() => { setPatientId(""); setRecords([]); }}>← All patients</button>
                 <div className="selected-patient">
                   <div className="workspace-title">
                     <PixelWorkspaceIcon workspace="patient" size={36} />
@@ -673,14 +678,14 @@ export function Doctor({
                     aria-current={chartTab === "overview" ? "page" : undefined}
                     onClick={() => setChartTab("overview")}
                   >
-                    <PixelVisit /> Summary
+                    <PixelVisit /> Overview
                   </button>
                   <button
                     type="button"
                     aria-current={chartTab === "history" ? "page" : undefined}
                     onClick={() => setChartTab("history")}
                   >
-                    <PixelDocument /> History
+                    <PixelDocument /> Reports & history
                   </button>
                   <button
                     type="button"
