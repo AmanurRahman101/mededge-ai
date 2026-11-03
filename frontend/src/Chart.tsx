@@ -7,7 +7,13 @@ import {
   PixelWorkspaceIcon,
 } from "./PixelIcons";
 import { ChartOverview, recordStatus } from "./ChartOverview";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { deleteChart, getChart, post, updateChart } from "./api";
 import { navigate } from "./navigation";
 import { useApp } from "./store";
@@ -46,13 +52,16 @@ const activityText: Record<string, string> = {
 type PatientTab = "records" | "doctors" | "activity" | "summary";
 function currentTab(): PatientTab {
   const value = new URLSearchParams(window.location.search).get("tab");
-  return value === "doctors" || value === "activity" || value === "summary" ? value : "records";
+  return value === "doctors" || value === "activity" || value === "summary"
+    ? value
+    : "records";
 }
 function RecordMenu({ children }: { children: ReactNode }) {
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     function onPointer(event: PointerEvent) {
-      if (menu.current?.open && !menu.current.contains(event.target as Node)) menu.current.open = false;
+      if (menu.current?.open && !menu.current.contains(event.target as Node))
+        menu.current.open = false;
     }
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape" && menu.current?.open) {
@@ -63,9 +72,24 @@ function RecordMenu({ children }: { children: ReactNode }) {
     }
     document.addEventListener("pointerdown", onPointer);
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("pointerdown", onPointer); document.removeEventListener("keydown", onKey); };
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
   }, []);
-  return <details ref={menu} className="record-manage"><summary>Manage</summary><div onClick={event => { if ((event.target as HTMLElement).closest("button") && menu.current) menu.current.open = false; }}>{children}</div></details>;
+  return (
+    <details ref={menu} className="record-manage">
+      <summary>Manage</summary>
+      <div
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest("button") && menu.current)
+            menu.current.open = false;
+        }}
+      >
+        {children}
+      </div>
+    </details>
+  );
 }
 
 export function PatientChart() {
@@ -83,6 +107,7 @@ export function PatientChart() {
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [olderActivity, setOlderActivity] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");
   const [status, setStatus] = useState("");
@@ -188,8 +213,8 @@ export function PatientChart() {
         <div className="workspace-title">
           <PixelWorkspaceIcon workspace="patient" size={42} />
           <div>
-            <h1>My health records</h1>
-            <p>{user?.full_name} · Reports, notes and care team</p>
+            <h1>My reports</h1>
+            <p>{user?.full_name} · Your health information</p>
           </div>
         </div>
         <button
@@ -213,7 +238,7 @@ export function PatientChart() {
           aria-current={tab === "doctors" ? "page" : undefined}
           onClick={() => selectTab("doctors")}
         >
-          <Users size={18} /> Doctors & consent{" "}
+          <Users size={18} /> My doctors{" "}
           {connections.some((c) => c.status === "pending") && (
             <span className="chart-dot" aria-label="Pending requests" />
           )}
@@ -224,13 +249,6 @@ export function PatientChart() {
           onClick={() => selectTab("summary")}
         >
           <PixelVitals size={18} /> My summary
-        </button>
-        <button
-          type="button"
-          aria-current={tab === "activity" ? "page" : undefined}
-          onClick={() => selectTab("activity")}
-        >
-          <ShieldCheck size={18} /> Activity
         </button>
       </nav>
       {error && (
@@ -245,9 +263,7 @@ export function PatientChart() {
           <div className="chart-heading">
             <div>
               <h2>Your reports</h2>
-              <p className="lede">
-                Open a record to see its reading and your doctor’s notes.
-              </p>
+              <p className="lede">Choose a report to open it.</p>
             </div>
             <button
               className="secondary"
@@ -258,60 +274,63 @@ export function PatientChart() {
               Refresh
             </button>
           </div>
-          <div className="chart-filters">
-            <label>
-              Search titles
-              <input
-                type="search"
-                value={search}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search your records"
-              />
-            </label>
-            <label>
-              Type
-              <select
-                value={filter}
-                onChange={(e) => {
-                  setFilter(e.target.value);
-                  setOffset(0);
-                }}
-              >
-                <option value="">All types</option>
-                <option value="prescription">Prescription</option>
-                <option value="lab_report">Lab report</option>
-                <option value="mixed">Mixed</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
-            <label>
-              Status
-              <select
-                value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setOffset(0);
-                }}
-              >
-                <option value="">All statuses</option>
-                <option value="reviewing">Ready for review</option>
-                <option value="approved">Approved</option>
-                <option value="failed">Failed</option>
-                <option value="interrupted">Interrupted</option>
-              </select>
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={archived}
-                onChange={(e) => {
-                  setArchived(e.target.checked);
-                  setOffset(0);
-                }}
-              />{" "}
-              Archived
-            </label>
-          </div>
+          <details className="patient-tools">
+            <summary>Find a report or show hidden reports</summary>
+            <div className="chart-filters">
+              <label>
+                Search titles
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search your records"
+                />
+              </label>
+              <label>
+                Type
+                <select
+                  value={filter}
+                  onChange={(e) => {
+                    setFilter(e.target.value);
+                    setOffset(0);
+                  }}
+                >
+                  <option value="">All types</option>
+                  <option value="prescription">Prescription</option>
+                  <option value="lab_report">Lab report</option>
+                  <option value="mixed">Mixed</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label>
+                Status
+                <select
+                  value={status}
+                  onChange={(e) => {
+                    setStatus(e.target.value);
+                    setOffset(0);
+                  }}
+                >
+                  <option value="">All statuses</option>
+                  <option value="reviewing">Ready for review</option>
+                  <option value="approved">Approved</option>
+                  <option value="failed">Failed</option>
+                  <option value="interrupted">Interrupted</option>
+                </select>
+              </label>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={archived}
+                  onChange={(e) => {
+                    setArchived(e.target.checked);
+                    setOffset(0);
+                  }}
+                />{" "}
+                Archived
+              </label>
+            </div>
+          </details>
           {loading ? (
             <p className="lede" role="status">
               Loading records…
@@ -364,58 +383,71 @@ export function PatientChart() {
                       </form>
                     ) : (
                       <>
-                        <h3>{item.title}</h3>
+                        <h3>
+                          {item.title === "Report"
+                            ? item.document_type === "prescription"
+                              ? "Prescription"
+                              : "Medical report"
+                            : item.title}
+                        </h3>
                         <p>
-                          {new Date(item.created_at).toLocaleDateString()} ·{" "}
-                          {item.document_type?.replace("_", " ") || "Report"} ·{" "}
-                          {item.has_published_note ? "Doctor note published" : recordStatus(item.status)}
+                          {new Date(item.created_at).toLocaleDateString(
+                            "en-GB",
+                            { day: "numeric", month: "short", year: "numeric" },
+                          )}{" "}
+                          ·
+                          {item.has_published_note
+                            ? "Doctor’s note ready"
+                            : item.status === "reviewing"
+                              ? "Not yet checked by a doctor"
+                              : recordStatus(item.status)}
                         </p>
                       </>
                     )}
                   </div>
                   <div className="record-actions">
                     <RecordMenu>
-                        <button
-                          className="text-link"
-                          type="button"
-                          onClick={() => {
-                            setEditing(item.run_id);
-                            setTitle(item.title);
-                          }}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          className="text-link"
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
+                      <button
+                        className="text-link"
+                        type="button"
+                        onClick={() => {
+                          setEditing(item.run_id);
+                          setTitle(item.title);
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        className="text-link"
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          void action(() =>
+                            updateChart(`/records/${item.run_id}`, {
+                              archived: !archived,
+                            }),
+                          )
+                        }
+                      >
+                        {archived ? "Restore" : "Archive"}
+                      </button>
+                      <button
+                        className="text-link danger-link"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Permanently delete “${item.title}” and its notes? This cannot be undone.`,
+                            )
+                          )
                             void action(() =>
-                              updateChart(`/records/${item.run_id}`, {
-                                archived: !archived,
-                              }),
-                            )
-                          }
-                        >
-                          {archived ? "Restore" : "Archive"}
-                        </button>
-                        <button
-                          className="text-link danger-link"
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Permanently delete “${item.title}” and its notes? This cannot be undone.`,
-                              )
-                            )
-                              void action(() =>
-                                deleteChart(`/records/${item.run_id}`),
-                              );
-                          }}
-                        >
-                          Delete
-                        </button>
+                              deleteChart(`/records/${item.run_id}`),
+                            );
+                        }}
+                      >
+                        Delete
+                      </button>
                     </RecordMenu>
                     <button
                       className="record-open"
@@ -425,40 +457,42 @@ export function PatientChart() {
                         navigate(`/patient/records/${item.run_id}`)
                       }
                     >
-                      <ArrowRight size={20} />
+                      Open report <ArrowRight size={20} />
                     </button>
                   </div>
                 </article>
               ))}
             </div>
           )}
-          <div className="row-actions chart-pages">
-            <button
-              className="secondary"
-              type="button"
-              disabled={offset === 0 || loading}
-              onClick={() => setOffset(Math.max(0, offset - 20))}
-            >
-              Previous
-            </button>
-            <span>Page {Math.floor(offset / 20) + 1}</span>
-            <button
-              className="secondary"
-              type="button"
-              disabled={!hasMore || loading}
-              onClick={() => setOffset(offset + 20)}
-            >
-              Next
-            </button>
-          </div>
+          {(offset > 0 || hasMore) && (
+            <div className="row-actions chart-pages">
+              <button
+                className="secondary"
+                type="button"
+                disabled={offset === 0 || loading}
+                onClick={() => setOffset(Math.max(0, offset - 20))}
+              >
+                Previous
+              </button>
+              <span>Page {Math.floor(offset / 20) + 1}</span>
+              <button
+                className="secondary"
+                type="button"
+                disabled={!hasMore || loading}
+                onClick={() => setOffset(offset + 20)}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </section>
       ) : tab === "doctors" ? (
         <section className="chart-section">
           <div className="chart-heading">
             <div>
-              <h2>Doctors & consent</h2>
+              <h2>My doctors</h2>
               <p className="lede">
-                You choose who can see and add to your chart.
+                You decide which doctors can see your reports.
               </p>
               <button
                 className="text-link"
@@ -473,7 +507,7 @@ export function PatientChart() {
                   )
                 }
               >
-                Refresh requests
+                Check for requests
               </button>
             </div>
             <button
@@ -489,7 +523,7 @@ export function PatientChart() {
                 })
               }
             >
-              Create connection code
+              Share with a doctor
             </button>
           </div>
           {code && (
@@ -515,7 +549,21 @@ export function PatientChart() {
             <article className="connection-card" key={c.doctor_id}>
               <div>
                 <h3>{c.name || "Doctor"}</h3>
-                <p>{c.email} · Doctor account is self-declared</p>
+                <p>
+                  {c.status === "approved"
+                    ? "Can see your reports"
+                    : c.status === "pending"
+                      ? "Wants to see your reports"
+                      : "Cannot see your reports"}
+                </p>
+                <details>
+                  <summary>Doctor details</summary>
+                  <p>{c.email}</p>
+                  <p>
+                    Professional qualifications have not been checked by
+                    MedEdge.
+                  </p>
+                </details>
               </div>
               {c.status === "pending" && (
                 <div className="consent-details">
@@ -531,7 +579,7 @@ export function PatientChart() {
                         })
                       }
                     />
-                    I understand and approve these permissions.
+                    I understand what this doctor can see and do.
                   </label>
                   <div className="row-actions">
                     <button
@@ -552,7 +600,7 @@ export function PatientChart() {
                         )
                       }
                     >
-                      Approve access
+                      Allow this doctor
                     </button>
                     <button
                       className="secondary"
@@ -567,7 +615,7 @@ export function PatientChart() {
                         )
                       }
                     >
-                      Decline
+                      Do not allow
                     </button>
                   </div>
                 </div>
@@ -580,7 +628,7 @@ export function PatientChart() {
                   onClick={() => {
                     if (
                       window.confirm(
-                        `Revoke ${c.name || "this doctor"}’s access to your chart?`,
+                        `Stop sharing your reports with ${c.name || "this doctor"}?`,
                       )
                     )
                       void action(() =>
@@ -588,7 +636,7 @@ export function PatientChart() {
                       );
                   }}
                 >
-                  Revoke access
+                  Stop sharing
                 </button>
               )}
             </article>
@@ -598,8 +646,8 @@ export function PatientChart() {
         <section className="chart-section">
           <div className="chart-heading">
             <div>
-              <h2>Activity</h2>
-              <p className="lede">A record of changes and access decisions.</p>
+              <h2>Recent changes</h2>
+              <p className="lede">Changes to your reports and doctor access.</p>
             </div>
             <button
               className="secondary"
@@ -623,30 +671,40 @@ export function PatientChart() {
             </div>
           ) : (
             <ol className="activity-list">
-              {activity.map((entry) => (
-                <li key={entry.id}>
-                  <strong>
-                    {activityText[entry.action] ||
-                      entry.action.replaceAll("_", " ")}
-                  </strong>
-                  <time>{new Date(entry.occurred_at).toLocaleString()}</time>
-                  {entry.run_id && (
-                    <button
-                      className="text-link"
-                      type="button"
-                      onClick={() =>
-                        navigate(`/patient/records/${entry.run_id}`)
-                      }
-                    >
-                      Open record
-                    </button>
-                  )}
-                </li>
-              ))}
+              {activity
+                .filter((entry) => entry.action !== "summary_amendment_started")
+                .slice(0, olderActivity ? undefined : 5)
+                .map((entry) => (
+                  <li key={entry.id}>
+                    <strong>
+                      {activityText[entry.action] || "Your record was updated"}
+                    </strong>
+                    <time>{new Date(entry.occurred_at).toLocaleString()}</time>
+                    {entry.run_id && (
+                      <button
+                        className="text-link"
+                        type="button"
+                        onClick={() =>
+                          navigate(`/patient/records/${entry.run_id}`)
+                        }
+                      >
+                        Open record
+                      </button>
+                    )}
+                  </li>
+                ))}
             </ol>
           )}
+          {activity.filter(entry => entry.action !== "summary_amendment_started").length > 5 && <button className="secondary" type="button" onClick={() => setOlderActivity(value => !value)}>{olderActivity ? "Show fewer changes" : "Show older changes"}</button>}
         </section>
       )}
+      <button
+        className="text-link patient-history-link"
+        type="button"
+        onClick={() => selectTab(tab === "activity" ? "records" : "activity")}
+      >
+        {tab === "activity" ? "Back to my reports" : "See recent changes"}
+      </button>
     </main>
   );
 }

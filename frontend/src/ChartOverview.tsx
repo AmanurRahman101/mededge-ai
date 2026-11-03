@@ -1,12 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChart, post } from "./api";
 import { navigate } from "./navigation";
-import {
-  PixelPill,
-  PixelFlask,
-  PixelVisit,
-  PixelVitals,
-} from "./PixelIcons";
+import { PixelPill, PixelFlask, PixelVisit, PixelVitals } from "./PixelIcons";
 
 type Note = {
   id: string;
@@ -155,7 +150,9 @@ export function ChartOverview({
     <section className="patient-overview" aria-label="Patient summary">
       <div className="module-heading">
         <div>
-          <h2>Patient summary</h2>
+          <h2>
+            {role === "patient" ? "Your health summary" : "Patient summary"}
+          </h2>
           <p>
             All saved history, including archived reports. Updated from the
             latest saved entries.
@@ -188,11 +185,15 @@ export function ChartOverview({
             <div className="module-heading">
               <div>
                 <h3>
-                  <PixelVisit size={22} /> Verified history at a glance
+                  <PixelVisit size={22} />{" "}
+                  {role === "patient"
+                    ? "What your doctor shared"
+                    : "Verified history at a glance"}
                 </h3>
                 <p className="module-help">
-                  Automatically summarized from doctor-published notes. Links
-                  identify the source of each item.
+                  {role === "patient"
+                    ? "A summary of your doctor’s notes. Open a report for details."
+                    : "Automatically summarized from doctor-published notes. Links identify the source of each item."}
                 </p>
               </div>
               <div className="segmented" aria-label="Summary language">
@@ -238,8 +239,14 @@ export function ChartOverview({
                             {
                               (
                                 {
-                                  assessment: "Conditions & assessments",
-                                  medicines: "Medication history",
+                                  assessment:
+                                    role === "patient"
+                                      ? "Health problems"
+                                      : "Conditions & assessments",
+                                  medicines:
+                                    role === "patient"
+                                      ? "Medicines mentioned"
+                                      : "Medication history",
                                   tests: "Tests & findings",
                                   care: "Care & follow-up",
                                 } as Record<string, string>
@@ -300,7 +307,7 @@ export function ChartOverview({
           </section>
           <details className="overview-clinical">
             <summary>
-              Read published source notes ({data.published_note_count})
+              Read your doctor’s notes ({data.published_note_count})
             </summary>
             {data.published_note_count === 0 ? (
               <p className="empty-inline">
@@ -329,7 +336,7 @@ export function ChartOverview({
             )}
           </details>
           <details className="overview-provisional">
-            <summary>Medications and tests from reports (unreviewed)</summary>
+            <summary>Report readings — not checked by a doctor</summary>
             <div className="overview-readings">
               <section>
                 <h3>
@@ -392,7 +399,7 @@ export function ChartOverview({
             </div>
           </details>
           <details className="overview-history">
-            <summary>Browse source reports ({data.record_count})</summary>
+            <summary>Open your reports ({data.record_count})</summary>
             {data.records.length ? (
               data.records.map((entry) => (
                 <div className="overview-report" key={entry.run_id}>
