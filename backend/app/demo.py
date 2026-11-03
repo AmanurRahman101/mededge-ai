@@ -121,6 +121,13 @@ def seed(db: Database, settings: Settings) -> None:
             session.commit()
     for index, case in enumerate(list_cases()):
         run_id = f"demo-{case['id']}"
+        # Hosted records outlive Render's local filesystem. Restore the recorded
+        # sample previews on startup even when the database row already exists.
+        folder = db.runs_dir / run_id
+        folder.mkdir(parents=True, exist_ok=True)
+        for name in ("redacted.png", "overlay.png"):
+            if not (folder / name).is_file():
+                shutil.copyfile(SAMPLES / case["file"], folder / name)
         if db.get(run_id) is not None:
             continue
         extraction = Extraction.model_validate(case["extraction"])
@@ -137,10 +144,6 @@ def seed(db: Database, settings: Settings) -> None:
                 submitted_by=DOCTOR_ID if index == 0 else PATIENT_ID,
             )
         )
-        folder = db.runs_dir / run_id
-        folder.mkdir(parents=True, exist_ok=True)
-        for name in ("redacted.png", "overlay.png"):
-            shutil.copyfile(SAMPLES / case["file"], folder / name)
         if index == 0:
             with db.session() as session:
                 session.add(

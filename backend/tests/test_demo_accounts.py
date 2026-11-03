@@ -102,3 +102,20 @@ def test_image_type_comes_from_the_bytes_not_the_header():
     assert validate_image_size(out.getvalue()) == "image/png"
     with pytest.raises(ValueError, match="Upload a PNG"):
         validate_image_size(b"<html>not an image</html>")
+
+
+def test_restart_restores_missing_sample_images_without_replacing_saved_notes(demo_client):
+    db = demo_client.app.state.db
+    db.update("demo-cbc", title="Doctor's saved title")
+    folder = db.runs_dir / "demo-cbc"
+    for name in ("overlay.png", "redacted.png"):
+        (folder / name).unlink()
+    demo.seed(db, demo_client.app.state.settings)
+    assert db.get("demo-cbc").title == "Doctor's saved title"
+    with db.session() as session:
+        assert session.get(ClinicalSummary, "demo-note-demo-cbc").status == "published"
+    sign_in(demo_client, "doctor@example.com")
+    for name in ("overlay.png", "redacted.png"):
+        response = demo_client.get(f"/api/runs/demo-cbc/files/{name}")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
