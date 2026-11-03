@@ -10,6 +10,8 @@ globalThis.__runFixture = fixture;
 const plugin = {
   name: "test-workspace",
   setup(build) {
+    build.onResolve({ filter: /\.png$/ }, args => ({ path: args.path, namespace: "image" }));
+    build.onLoad({ filter: /.*/, namespace: "image" }, () => ({ contents: 'export default "/pixel.png";', loader: "js" }));
     build.onResolve({ filter: /\.css$/ }, args => ({ path: args.path, namespace: "fixture" }));
     build.onResolve({ filter: /^@phosphor-icons\/react$/ }, () => ({ path: "icons", namespace: "fixture" }));
     build.onResolve({ filter: /^\.\/(store|useRun|api)$/ }, args => ({ path: args.path, namespace: "fixture" }));
@@ -39,7 +41,8 @@ doctorModule._compile(doctorResult.outputFiles[0].text, doctorModule.filename);
 const doctorHtml = renderToStaticMarkup(React.createElement(doctorModule.exports.Doctor));
 assert.match(doctorHtml, /CRP/, "Doctor result must show extracted advised tests");
 assert.match(doctorHtml, /RBS/, "Doctor result must show every extracted advised test");
-assert.match(doctorHtml, /approved export includes them as draft requests/);
+assert.doesNotMatch(doctorHtml, /FHIR|How this record was made/);
+assert.doesNotMatch(html, /FHIR|How this record was made/);
 globalThis.__runFixture = { ...fixture, status: "queued", overlay_url: "/overlay.png", extraction: null };
 const queuedHtml = renderToStaticMarkup(React.createElement(doctorModule.exports.Doctor));
 assert.doesNotMatch(queuedHtml, /\/overlay\.png/, "Do not request an overlay before it has been prepared");
@@ -47,7 +50,7 @@ assert.match(queuedHtml, /Preparing/, "Queued reports should explain that the pr
 globalThis.__runFixture = { ...fixture, status: "awaiting_confirmation", overlay_url: "/overlay.png", extraction: null };
 const waitingHtml = renderToStaticMarkup(React.createElement(doctorModule.exports.Doctor));
 assert.match(waitingHtml, /src="\/overlay\.png"/, "The preview appears when redaction is ready");
-assert.match(waitingHtml, /<button class="primary" disabled="">Confirm redaction<\/button>/, "Confirmation waits for the image to load");
+assert.match(waitingHtml, /<button class="primary" disabled="">Confirm privacy &amp; continue<\/button>/, "Confirmation waits for the image to load");
 globalThis.__runFixture = { ...fixture, status: "processing", overlay_url: "/overlay.png", extraction: null };
 const processingHtml = renderToStaticMarkup(React.createElement(doctorModule.exports.Doctor));
 assert.match(processingHtml, /Verify and publish/, "Explain how to publish the draft after processing");

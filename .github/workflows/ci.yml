@@ -57,3 +57,23 @@ jobs:
       - name: Test
         run: npm test
         working-directory: frontend
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install browser fixture backend
+        run: pip install -e "backend[dev]"
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Patient and doctor browser journeys
+        run: npm run test:ui
+        working-directory: frontend
+        env:
+          PYTHON: python
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workspace-browser-checks
+          path: scripts/out/ui

@@ -1,5 +1,6 @@
 """Patient-controlled chart connections and history."""
 
+import asyncio
 import json
 import re
 import secrets
@@ -328,6 +329,7 @@ def records(
     limit: int = 20,
     document_type: str | None = None,
     status: str | None = None,
+    include_source: bool = True,
 ):
     user = require_user(request)
     owner_id = patient_id or user.id
@@ -358,9 +360,22 @@ def records(
             .offset(max(offset, 0))
             .limit(limit + 1)
         ).all()
+        published = (
+            set(
+                session.exec(
+                    select(ClinicalSummary.run_id).where(
+                        ClinicalSummary.run_id.in_([r.id for r in rows[:limit]]),
+                        ClinicalSummary.status == "published",
+                    )
+                ).all()
+            )
+            if rows
+            else set()
+        )
         return {
             "records": [
                 {
+                    "has_published_note": r.id in published,
                     "run_id": r.id,
                     "title": r.title,
                     "status": r.status,
@@ -368,7 +383,7 @@ def records(
                     "created_at": r.created_at.isoformat(),
                     "submitted_by": r.submitted_by,
                     "archived": r.archived,
-                    "source_available": source_available(request, r.id),
+                    "source_available": include_source and source_available(request, r.id),
                 }
                 for r in rows[:limit]
             ],
@@ -377,7 +392,13 @@ def records(
 
 
 @router.get("/patients/{patient_id}/overview")
-def patient_overview(patient_id: str, request: Request, offset: int = 0, limit: int = 20):
+def patient_overview(
+    patient_id: str,
+    request: Request,
+    offset: int = 0,
+    limit: int = 20,
+    include_source: bool = True,
+):
     """Return saved chart history, not a model-generated clinical assessment."""
     doctor = require_role(request, "doctor")
     limit = min(max(limit, 1), 50)
@@ -466,7 +487,7 @@ def patient_overview(patient_id: str, request: Request, offset: int = 0, limit: 
                     "document_type": row.document_type,
                     "created_at": row.created_at.isoformat(),
                     "archived": row.archived,
-                    "source_available": source_available(request, row.id),
+                    "source_available": include_source and source_available(request, row.id),
                     "medications": readings("medications", "raw_text"),
                     "tests": readings("advised_tests", "raw_name"),
                     "lab_rows": lab_rows,
@@ -485,6 +506,120 @@ def patient_overview(patient_id: str, request: Request, offset: int = 0, limit: 
                 }
             )
         return {"records": items, "has_more": len(rows) > limit}
+
+
+@router.get("/patients/{patient_id}/summary")
+def chart_summary(patient_id: str, request: Request):
+    """Complete source-linked overview. No model calls or clinical inference."""
+    user = require_user(request)
+    with request.app.state.db.session() as session:
+        if user.id != patient_id or user.role != "patient":
+            connection = session.get(ChartConnection, (patient_id, user.id))
+            if user.role != "doctor" or not connection or connection.status != "approved":
+                raise HTTPException(404, "Chart not found.")
+        records = session.exec(
+            select(RunRow)
+            .where(RunRow.owner_id == patient_id)
+            .order_by(RunRow.created_at.desc(), RunRow.id.desc())
+        ).all()
+        notes = session.exec(
+            select(ClinicalSummary)
+            .join(RunRow)
+            .where(RunRow.owner_id == patient_id, ClinicalSummary.status == "published")
+            .order_by(ClinicalSummary.published_at.desc(), ClinicalSummary.id.desc())
+        ).all()
+        superseded = {n.amends_id for n in notes if n.amends_id}
+        authors = (
+            {
+                a.id: a.full_name
+                for a in session.exec(
+                    select(AuthUser).where(AuthUser.id.in_({n.author_id for n in notes}))
+                ).all()
+            }
+            if notes
+            else {}
+        )
+        items = []
+        for row in records:
+            try:
+                reading = json.loads(row.extraction_json or "{}")
+                if not isinstance(reading, dict):
+                    reading = {}
+            except (TypeError, ValueError):
+                reading = {}
+            reading = {k: v if isinstance(v, list) else [] for k, v in reading.items()}
+            items.append(
+                {
+                    "run_id": row.id,
+                    "title": row.title,
+                    "created_at": row.created_at.isoformat(),
+                    "status": row.status,
+                    "archived": row.archived,
+                    "document_type": row.document_type,
+                    "medications": [
+                        m["raw_text"]
+                        for m in (reading.get("medications") or [])
+                        if isinstance(m, dict)
+                        and isinstance(m.get("raw_text"), str)
+                        and not m.get("contains_identifier")
+                    ],
+                    "tests": [
+                        t["raw_name"]
+                        for t in (reading.get("advised_tests") or [])
+                        if isinstance(t, dict) and isinstance(t.get("raw_name"), str)
+                    ],
+                    "results": [
+                        r
+                        for r in (reading.get("rows") or [])
+                        if isinstance(r, dict) and not r.get("contains_identifier")
+                    ],
+                    "notes": [
+                        {
+                            "id": n.id,
+                            "summary_en": n.summary_en,
+                            "summary_bn": n.summary_bn,
+                            "author_name": authors.get(n.author_id, "Doctor"),
+                            "published_at": n.published_at.isoformat() if n.published_at else None,
+                        }
+                        for n in notes
+                        if n.run_id == row.id and n.id not in superseded
+                    ],
+                }
+            )
+        return Response(
+            content=json.dumps(
+                {
+                    "records": items,
+                    "record_count": len(items),
+                    "published_note_count": sum(len(r["notes"]) for r in items),
+                }
+            ),
+            media_type="application/json",
+            headers={"Cache-Control": "no-store"},
+        )
+
+
+@router.post("/patients/{patient_id}/summary")
+async def refresh_chart_digest(patient_id: str, request: Request, retry: bool = False):
+    from app.pipeline.chart_digest import ensure_digest
+
+    user = require_user(request)
+    throttle(request, "chart-summary", user.id, 30, 60)
+    if not (user.role == "patient" and user.id == patient_id):
+        if user.role != "doctor" or not active_connection(
+            request.app.state.db, patient_id, user.id
+        ):
+            raise HTTPException(404, "Chart not found.")
+    if retry:
+        throttle(request, "chart-summary-retry", user.id, 3, 300)
+    result = await ensure_digest(request.app, patient_id, retry=retry)
+    if user.role == "doctor" and not active_connection(request.app.state.db, patient_id, user.id):
+        raise HTTPException(404, "Chart not found.")
+    return Response(
+        content=json.dumps(result),
+        media_type="application/json",
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.patch("/records/{run_id}")
@@ -540,7 +675,7 @@ def download_fhir(run_id: str, request: Request):
 
 
 @router.delete("/records/{run_id}")
-def delete_record(run_id: str, request: Request):
+async def delete_record(run_id: str, request: Request):
     patient = require_role(request, "patient")
     db = request.app.state.db
     with db.session() as session:
@@ -553,7 +688,7 @@ def delete_record(run_id: str, request: Request):
             from app.store.object_storage import StorageError
 
             try:
-                request.app.state.object_storage.delete_record(run_id)
+                await asyncio.to_thread(request.app.state.object_storage.delete_record, run_id)
             except StorageError:
                 raise HTTPException(503, "Could not delete stored files. Try again.") from None
         # Never follow unexpected paths or symlinks while cleaning temporary files.
@@ -571,12 +706,18 @@ def delete_record(run_id: str, request: Request):
                     ) from None
         else:
             raise HTTPException(500, "Could not safely delete the source files.")
+        from app.store.db import ChartDigest
+
+        session.exec(delete(ChartDigest).where(ChartDigest.patient_id == patient.id))
         session.exec(delete(ClinicalSummary).where(ClinicalSummary.run_id == run_id))
         session.exec(delete(RunGrant).where(RunGrant.run_id == run_id))
         session.exec(delete(ChartActivity).where(ChartActivity.run_id == run_id))
         session.delete(row)
         activity(session, patient.id, patient.id, "record_deleted")
         session.commit()
+    from app.pipeline.chart_digest import schedule_digest
+
+    schedule_digest(request.app, patient.id)
     return {"ok": True}
 
 
@@ -652,7 +793,7 @@ def summaries(run_id: str, request: Request):
 
 
 @router.post("/records/{run_id}/summaries/{summary_id}")
-def save_summary(
+async def save_summary(
     run_id: str, summary_id: str, body: SummaryUpdate, request: Request, publish: bool = False
 ):
     from app.api.runs import _row_or_404
@@ -693,6 +834,10 @@ def save_summary(
             activity(session, row.owner_id, doctor.id, "summary_published", run_id)
         session.add(summary)
         session.commit()
+    if publish:
+        from app.pipeline.chart_digest import schedule_digest
+
+        schedule_digest(request.app, row.owner_id)
     return {"status": "published" if publish else "draft"}
 
 

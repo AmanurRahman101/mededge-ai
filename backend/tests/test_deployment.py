@@ -67,7 +67,7 @@ def test_migration_keeps_legacy_rows_ownerless(tmp_path: Path):
         ).fetchall()
         assert rows == [("old-a", None, None), ("old-b", None, None)]
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261101_trace",
+            "20261103_digest",
         )
 
 
@@ -90,5 +90,5 @@ def test_migrations_prefer_direct_database_url(tmp_path: Path):
     assert not runtime_database.exists()
     with sqlite3.connect(migration_database) as connection:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == (
-            "20261101_trace",
+            "20261103_digest",
         )

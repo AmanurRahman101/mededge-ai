@@ -6,6 +6,7 @@ import subprocess
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Barrier
 from types import SimpleNamespace
@@ -18,7 +19,8 @@ from sqlalchemy import delete
 from app.auth.email import _reserve
 from app.config import Settings
 from app.main import create_app
-from app.store.db import AuthCounter
+from app.pipeline.chart_digest import DigestItem, DigestResult
+from app.store.db import AuthCounter, AuthUser, ChartConnection, ClinicalSummary, RunRow
 
 PG_URL = os.environ.get("TEST_POSTGRES_URL")
 pytestmark = pytest.mark.skipif(not PG_URL, reason="TEST_POSTGRES_URL is not configured")
@@ -63,6 +65,78 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
         response = client.post("/api/auth/login", json={"email": email, "password": password})
         assert response.status_code == 200, response.text
         assert response.json()["user"]["role"] == "doctor"
+        doctor_id = response.json()["user"]["id"]
+        client.headers["x-csrf-token"] = response.json()["csrf_token"]
+        patient_id, record_id, note_id = [uuid.uuid4().hex for _ in range(3)]
+        now = datetime.now(UTC)
+        with client.app.state.db.session() as session:
+            session.add(
+                AuthUser(
+                    id=patient_id,
+                    email=f"{patient_id}@example.org",
+                    full_name="Fictional patient",
+                    password_hash="unused",
+                    role="patient",
+                    verified=True,
+                    created_at=now,
+                )
+            )
+            session.commit()
+            session.add(
+                RunRow(
+                    id=record_id,
+                    owner_id=patient_id,
+                    status="reviewing",
+                    created_at=now,
+                    pseudonym="Fictional",
+                )
+            )
+            session.add(
+                ChartConnection(
+                    patient_id=patient_id, doctor_id=doctor_id, status="approved", requested_at=now
+                )
+            )
+            session.commit()
+            session.add(
+                ClinicalSummary(
+                    id=note_id,
+                    run_id=record_id,
+                    author_id=doctor_id,
+                    transcript="Fictional note",
+                    summary_en="Fictional note",
+                    summary_bn="কাল্পনিক নোট",
+                    status="published",
+                    created_at=now,
+                    published_at=now,
+                )
+            )
+            session.commit()
+        calls = []
+
+        async def provider(*args, **kwargs):
+            calls.append(1)
+            return SimpleNamespace(
+                value=DigestResult(
+                    items=[
+                        DigestItem(
+                            category="assessment",
+                            text_en="Fictional note",
+                            text_bn="কাল্পনিক নোট",
+                            source_ids=[note_id],
+                        )
+                    ]
+                )
+            )
+
+        client.app.state.router.structured = provider
+        path = f"/api/chart/patients/{patient_id}/summary"
+        assert client.get(path).json()["published_note_count"] == 1
+        assert client.post(path).json()["status"] == "ready"
+        assert client.post(path).json()["status"] == "ready"
+        assert len(calls) == 1
+        assert client.post(f"/api/chart/connections/{patient_id}/revoke").status_code == 200
+        assert client.get(path).status_code == 404
+        assert client.post(path).status_code == 404
 
         # Two concurrent requests share a single remaining daily reservation.
         with client.app.state.db.session() as session:

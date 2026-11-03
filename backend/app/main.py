@@ -74,6 +74,10 @@ async def lifespan(app: FastAPI):
             yield
         finally:
             reset_task.cancel()
+            pending = list(app.state.tasks) + list(app.state.chart_digest_tasks.values())
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(reset_task, *pending, return_exceptions=True)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -82,6 +86,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.bus = EventBus()
     app.state.tasks = set()
+    app.state.chart_digest_tasks = {}
+    app.state.chart_digest_semaphore = asyncio.Semaphore(1)
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)

@@ -87,6 +87,14 @@ class ClinicalSummary(SQLModel, table=True):
     amends_id: str | None = Field(default=None, foreign_key="clinicalsummary.id")
 
 
+class ChartDigest(SQLModel, table=True):
+    patient_id: str = Field(primary_key=True, foreign_key="authuser.id")
+    fingerprint: str
+    status: str
+    items_json: str = "[]"
+    updated_at: datetime
+
+
 class SpendRow(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     day: str
@@ -214,4 +222,3 @@ class Database:
         with self.session() as session:
             session.add(SpendRow(day=datetime.now(UTC).date().isoformat(), usd=usd))
             session.commit()
-
