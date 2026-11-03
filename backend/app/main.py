@@ -108,6 +108,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings.app_env == "production" or not settings.enable_dev_routes
         ):
             return JSONResponse(status_code=404, content={"detail": "Not found"})
+        if request.url.path.startswith("/api/") and request.url.path != "/api/auth/me":
+            expected = request.headers.get("X-MedEdge-Account")
+            if expected:
+                from app.auth.security import session_for
+
+                found = session_for(request)
+                if not found or found[1].id != expected:
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "detail": ("Your active account changed. "
+                                       "Return to the original account to continue."),
+                            "code": "session_changed",
+                        },
+                    )
         if request.url.path.startswith("/api/") and request.method in {
             "POST",
             "PUT",

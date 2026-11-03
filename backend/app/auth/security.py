@@ -71,6 +71,28 @@ def verify_request(request: Request) -> None:
             )
 
 
+def check_throttle(request, scope: str, subject: str, limit: int, seconds: int) -> None:
+    now = datetime.now(UTC)
+    bucket = int(now.timestamp()) // seconds
+    key = f"{scope}:{digest(subject)}:{bucket}"
+    with request.app.state.db.session() as session:
+        row = session.get(AuthCounter, key)
+        if row and row.count >= limit:
+            retry = max(1, (bucket + 1) * seconds - int(now.timestamp()))
+            raise HTTPException(
+                429,
+                "Too many attempts. Please try again later.",
+                headers={"Retry-After": str(retry), "X-Error-Code": "throttled"},
+            )
+
+
+def clear_throttle(request, scope: str, subject: str) -> None:
+    prefix = f"{scope}:{digest(subject)}:"
+    with request.app.state.db.session() as session:
+        session.exec(delete(AuthCounter).where(AuthCounter.key.like(prefix + "%")))
+        session.commit()
+
+
 def throttle(request, scope: str, subject: str, limit: int, seconds: int) -> None:
     """Atomic fixed-window database counter, shared by all application instances."""
     from datetime import timedelta
@@ -98,7 +120,12 @@ def throttle(request, scope: str, subject: str, limit: int, seconds: int) -> Non
             session.exec(delete(AuthCounter).where(AuthCounter.expires_at < now))
         session.commit()
     if count > limit:
-        raise HTTPException(status_code=429, detail="Too many attempts. Please try again later.")
+        retry = max(1, (bucket + 1) * seconds - int(now.timestamp()))
+        raise HTTPException(
+            429,
+            "Too many attempts. Please try again later.",
+            headers={"Retry-After": str(retry), "X-Error-Code": "throttled"},
+        )
 
 
 def client_key(request) -> str:

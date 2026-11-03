@@ -1,7 +1,8 @@
 import { UserCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 
-import { getSession, logout } from "./api";
+import { getSession, logout, onSessionChange } from "./api";
+import "./session.css";
 import { AuthPage, AccountPage } from "./Auth";
 import { DemoPage } from "./Demo";
 import { Doctor } from "./Doctor";
@@ -22,6 +23,7 @@ export function App() {
   const setUser = useApp((state) => state.setUser);
   const [path, setPath] = useState(window.location.pathname);
   const [checking, setChecking] = useState(true);
+  const [sessionPaused, setSessionPaused] = useState(false);
   const [connectionError, setConnectionError] = useState("");
 
   const bootstrap = useCallback(async () => {
@@ -42,12 +44,38 @@ export function App() {
     void bootstrap();
   }, [bootstrap]);
   useEffect(() => {
+    if (!user) return;
+    let active = true;
+    let sequence = 0;
+    const revalidate = async () => {
+      const current = ++sequence;
+      setSessionPaused(true);
+      window.dispatchEvent(new Event("mededge-session-pause"));
+      try {
+        const next = await getSession(true);
+        if (!active || current !== sequence) return;
+        if (next?.id === user.id) {
+          await getSession(false, user.id);
+          if (!active || current !== sequence) return;
+          setSessionPaused(false);
+          window.dispatchEvent(new Event("mededge-session-resume"));
+        }
+      } catch { /* Stay paused until the account can be checked. */ }
+    };
+    const unsubscribe = onSessionChange(() => void revalidate());
+    const onFocus = () => void revalidate();
+    const onInvalidated = () => void revalidate();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("mededge-session-invalidated", onInvalidated);
+    return () => { active = false; unsubscribe(); window.removeEventListener("focus", onFocus); window.removeEventListener("mededge-session-invalidated", onInvalidated); };
+  }, [user?.id]);
+  useEffect(() => {
     const onNavigation = () => setPath(window.location.pathname);
     window.addEventListener("popstate", onNavigation);
     return () => window.removeEventListener("popstate", onNavigation);
   }, []);
   useEffect(() => {
-    if (checking || connectionError) return;
+    if (checking || connectionError || sessionPaused) return;
     const patientPath = path === "/patient" || path.startsWith("/patient/");
     const doctorPath = path === "/doctor" || path.startsWith("/doctor/");
     if ((patientPath || doctorPath || path === "/account") && !user) {
@@ -66,7 +94,7 @@ export function App() {
     ) {
       navigate(`/${user.role}`, true);
     }
-  }, [checking, connectionError, path, user]);
+  }, [checking, connectionError, path, user, sessionPaused]);
 
   async function signOut() {
     try {
@@ -85,12 +113,12 @@ export function App() {
   const doctorPath = path === "/doctor" || path.startsWith("/doctor/");
   const protectedPath = patientPath || doctorPath || path === "/account";
   return (
-    <div className="app">
+    <div className={`app${sessionPaused ? " session-paused" : ""}`}>
       <header className="topbar">
         <button
           className="wordmark"
           type="button"
-          onClick={() => navigate("/")}
+          onClick={() => navigate(user ? `/${user.role}` : "/")}
         >
           MedEdge<span className="wordmark-ai"> AI</span>
           <span className="wordmark-dot" aria-hidden="true">
@@ -146,6 +174,7 @@ export function App() {
           </button>
         </nav>
       </header>
+      {sessionPaused && <div className="session-warning" role="alert"><h1>Account changed</h1><p>This tab is paused to protect your work. Sign in to the original account in another tab, then return here. Unsaved edits remain in this tab while it stays open.</p><a href="/signin" target="_blank" rel="noreferrer">Open sign in in a new tab</a><button type="button" className="secondary" onClick={() => window.dispatchEvent(new Event("mededge-session-invalidated"))}>Check account again</button></div>}
       {checking ? (
         <main className="stage loading-stage" aria-live="polite">
           <span className="loading-dot" /> Connecting to MedEdge…

@@ -40,3 +40,22 @@
 .doctor-note .lede { margin: 6px 0; }
 .doctor-timeline details { margin-top: 14px; }
 .doctor-timeline summary { cursor: pointer; font-weight: 600; }
+
+.record-workspace .doctor-review-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.record-workspace .doctor-review-content { min-width: 0; max-height: calc(100vh - 240px); overflow: auto; padding: 0 4px 20px; }
+.record-workspace .doctor-compare-source { min-width: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 16px; }
+.record-workspace .doctor-source-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.record-workspace .doctor-source-heading h2 { margin: 0; }
+.record-workspace .doctor-zoom-controls { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.record-workspace .doctor-zoom-controls .secondary { min-height: 38px; padding: 6px 10px; }
+.record-workspace .doctor-source-scroll { max-height: calc(100vh - 390px); min-height: 240px; overflow: auto; border: 1px solid var(--line); background: var(--bg); }
+.record-workspace .doctor-source-scroll img { display: block; height: auto; }
+.record-workspace .doctor-source-files { display: grid; gap: 8px; margin-top: 12px; font-size: 14px; }
+.record-workspace .doctor-source-files audio { width: 100%; }
+@media (max-width: 760px) {
+  .record-workspace .doctor-review-layout { display: block; }
+  .record-workspace .doctor-compare-source { display: none; }
+  .record-workspace .doctor-review-content { max-height: none; overflow: visible; padding: 0; }
+}
+
+@media print { .doctor-compare-source, .reading-module, .publish-bar, .review-issues { display: none !important; } .doctor-review-layout, .doctor-review-content { display: block !important; max-height: none !important; overflow: visible !important; } .doctor-review-content .auth-field { display: none !important; } }

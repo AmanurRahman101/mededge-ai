@@ -1,3 +1,4 @@
+import { PatientSwitcher } from "./PatientSwitcher";
 import {
   useCallback,
   useEffect,
@@ -15,7 +16,7 @@ import {
   post,
 } from "./api";
 import { concatPcm, downsample, wavFromPcm16 } from "./audio";
-import { navigate } from "./navigation";
+import { navigate, registerNavigationGuard } from "./navigation";
 import { useApp } from "./store";
 import { prepareImage } from "./image";
 import { ChartOverview, recordStatus } from "./ChartOverview";
@@ -65,6 +66,7 @@ type RecordItem = {
 };
 type Summary = {
   id: string;
+  revision: number;
   author_id: string;
   author_name?: string;
   transcript: string;
@@ -251,6 +253,8 @@ export function Doctor({
   const [notice, setNotice] = useState("");
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [draft, setDraft] = useState<Summary | null>(null);
+  const savedDraft = useRef("");
+  const [zoom, setZoom] = useState(100);
   const [acknowledged, setAcknowledged] = useState(false);
   const [imageMissing, setImageMissing] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -291,7 +295,9 @@ export function Doctor({
       `/records/${encodeURIComponent(id)}/summaries`,
     );
     setSummaries(data.summaries);
-    setDraft(data.summaries.find((entry) => entry.status === "draft") || null);
+    const nextDraft = data.summaries.find((entry) => entry.status === "draft") || null;
+    savedDraft.current = nextDraft ? JSON.stringify([nextDraft.transcript, nextDraft.summary_en, nextDraft.summary_bn]) : "";
+    setDraft(nextDraft);
     setAcknowledged(false);
   }, []);
   useEffect(() => {
@@ -316,6 +322,15 @@ export function Doctor({
       );
     }
   }, [run?.run_id, run?.status, loadSummaries]);
+
+  const draftDirty = !!draft && !!savedDraft.current && JSON.stringify([draft.transcript, draft.summary_en, draft.summary_bn]) !== savedDraft.current;
+  useEffect(() => {
+    if (!draftDirty) return;
+    const unregister = registerNavigationGuard(() => window.confirm("You have unsaved changes. Leave without saving?"));
+    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => { unregister(); window.removeEventListener("beforeunload", beforeUnload); };
+  }, [draftDirty]);
 
   useEffect(() => {
     if (run && ["reviewing", "approved", "exported"].includes(run.status)) {
@@ -449,6 +464,7 @@ export function Doctor({
         `/api/chart/records/${encodeURIComponent(run.run_id)}/summaries/${encodeURIComponent(draft.id)}?publish=${publish}`,
         {
           transcript: draft.transcript,
+          expected_revision: draft.revision,
           summary_en: draft.summary_en,
           summary_bn: draft.summary_bn,
           acknowledge_unresolved: acknowledged,
@@ -672,6 +688,7 @@ export function Doctor({
                     </div>
                   </div>
                 </div>
+                <PatientSwitcher patients={connections} selected={patientId} disabled={busy || recorder.recording || recorder.starting} onChange={togglePatient} />
                 <nav className="module-tabs" aria-label="Patient workspace">
                   <button
                     type="button"
@@ -1145,6 +1162,14 @@ export function Doctor({
           </aside>
         </section>
       )}
+      {ready && recordTab !== "source" && <div className="doctor-review-layout">
+        <aside className="doctor-compare-source" aria-label="Source report for comparison">
+          <div className="doctor-source-heading"><h2>Source report</h2><div className="doctor-zoom-controls"><button className="secondary" type="button" onClick={() => setZoom(z => Math.max(50, z - 25))} aria-label="Zoom out">−</button><button className="secondary" type="button" onClick={() => setZoom(100)}>Fit width</button><button className="secondary" type="button" onClick={() => setZoom(z => Math.min(250, z + 25))} aria-label="Zoom in">+</button><span aria-live="polite">{zoom}%</span></div></div>
+          <p className="module-help">Redacted preview. Compare the reading with the original report.</p>
+          {imageMissing ? <div className="banner review"><p>The source preview is unavailable.</p><button className="secondary" type="button" onClick={() => { setImageMissing(false); setImageAttempt(a => a + 1); }}>Retry preview</button></div> : <div className="doctor-source-scroll"><img key={`compare-${run.run_id}-${imageAttempt}`} src={`${apiBase}${run.redacted_url || run.overlay_url}`} alt="Redacted report for comparison" style={{ width: `${zoom}%`, maxWidth: "none" }} onError={() => setImageMissing(true)} /></div>}
+          <div className="doctor-source-files">{run.original_available && <a href={`${apiBase}/api/runs/${encodeURIComponent(run.run_id)}/files/original`}>Download original image</a>}{run.audio_available && <><label htmlFor="comparison-audio">Doctor's recording</label><audio id="comparison-audio" controls preload="metadata" src={`${apiBase}/api/runs/${encodeURIComponent(run.run_id)}/files/audio`} /></>}</div>
+        </aside>
+        <div className="doctor-review-content">
       {ready && recordTab === "reading" && (
         <section className="reading-module">
           <h2>Report reading</h2>
@@ -1232,6 +1257,7 @@ export function Doctor({
                 Voice transcript
                 <textarea
                   rows={4}
+                  disabled={busy}
                   value={draft.transcript}
                   onChange={(e) => {
                     setAcknowledged(false);
@@ -1256,6 +1282,7 @@ export function Doctor({
                   English version
                   <textarea
                     rows={7}
+                    disabled={busy}
                     value={draft.summary_en}
                     onChange={(e) => {
                       setAcknowledged(false);
@@ -1267,6 +1294,7 @@ export function Doctor({
                   বাংলা সংস্করণ
                   <textarea
                     lang="bn"
+                    disabled={busy}
                     rows={7}
                     value={draft.summary_bn}
                     onChange={(e) => {
@@ -1365,6 +1393,8 @@ export function Doctor({
             ))}
         </section>
       )}
+        </div>
+      </div>}
     </main>
   );
 }

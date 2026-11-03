@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, Eye, EyeSlash, FileText, LockKey, ShareNetwork } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
-import { changePassword, forgotPassword, getDemoAccounts, type DemoAccounts, login, logout, register, resendVerification, resetPassword, setCsrfToken, verifyEmail, type UserRole } from "./api";
+import { ApiError, changePassword, forgotPassword, getDemoAccounts, type DemoAccounts, login, logout, register, resendVerification, resetPassword, setCsrfToken, verifyEmail, type UserRole } from "./api";
 import { navigate } from "./navigation";
 import { useApp } from "./store";
 
@@ -56,7 +56,7 @@ export function AuthPage({ path }: { path: string }) {
       else if (path === "/forgot-password") { await forgotPassword(email); setDone(true); }
       else if (path === "/reset-password") { await resetPassword(token, password); setDone(true); setPassword(""); setConfirm(""); }
       else if (path === "/check-email") { await resendVerification(email); setDone(true); setCooldown(60); }
-    } catch (caught) { setError(errorText(caught)); }
+    } catch (caught) { setError(errorText(caught)); if (caught instanceof ApiError && caught.retryAfter) setCooldown(caught.retryAfter); }
     finally { setBusy(false); }
   }
 

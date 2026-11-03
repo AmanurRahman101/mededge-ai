@@ -1,0 +1,5 @@
+.session-paused > main { display: none !important; }
+.session-paused .top-actions, .session-paused .workspace-switch { visibility: hidden; }
+.session-warning { width: min(680px, calc(100% - 40px)); margin: 60px auto; flex: 1; }
+.session-warning p { max-width: 60ch; }
+.session-warning a { display: inline-block; margin-right: 18px; }

@@ -181,7 +181,12 @@ def test_summary_draft_hidden_until_doctor_verifies_and_revocation_blocks_publis
     assert client.get("/api/chart/records/record/summaries").json()["summaries"] == []
     sign_in(client, "doctor")
     url = "/api/chart/records/record/summaries/summary?publish=true"
-    data = {"summary_en": "English", "summary_bn": "বাংলা", "transcript": "corrected"}
+    data = {
+        "summary_en": "English",
+        "summary_bn": "বাংলা",
+        "transcript": "corrected",
+        "expected_revision": 1,
+    }
     assert client.post(url, json=data).status_code == 422
     data.update(reviewed_both_languages=True, acknowledge_unresolved=True)
     assert client.post(url, json=data).status_code == 200
@@ -207,3 +212,41 @@ def test_summary_draft_hidden_until_doctor_verifies_and_revocation_blocks_publis
     assert client.post("/api/chart/connections/doctor/revoke").status_code == 200
     sign_in(client, "doctor")
     assert client.get("/api/chart/records/record/summaries").status_code == 404
+
+
+def test_draft_revision_rejects_stale_writes(request):
+    client = request.getfixturevalue("access_client")
+    now = datetime.now(UTC)
+    with client.app.state.db.session() as session:
+        session.add(
+            ChartConnection(
+                patient_id="patient1", doctor_id="doctor", status="approved", requested_at=now
+            )
+        )
+        session.add(
+            ClinicalSummary(
+                id="revision-test",
+                run_id="record",
+                author_id="doctor",
+                status="draft",
+                summary_en="First",
+                summary_bn="বাংলা",
+                transcript="original",
+                created_at=now,
+            )
+        )
+        session.commit()
+    sign_in(client, "doctor")
+    url = "/api/chart/records/record/summaries/revision-test"
+    body = {
+        "summary_en": "First correction",
+        "summary_bn": "বাংলা",
+        "transcript": "original",
+        "expected_revision": 1,
+    }
+    assert client.post(url, json=body).json()["revision"] == 2
+    body["summary_en"] = "Stale overwrite"
+    assert client.post(url, json=body).status_code == 409
+    saved = client.get("/api/chart/records/record/summaries").json()["summaries"][0]
+    assert saved["summary_en"] == "First correction"
+    assert saved["revision"] == 2

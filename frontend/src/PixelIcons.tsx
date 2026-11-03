@@ -335,13 +335,13 @@ export function PixelDocument({
       aria-hidden="true"
     >
       {/* Top clip */}
-      <rect x="6" y="1" width="4" height="2" fill="var(--ink, #111827)" />
+      <rect x="6" y="1" width="4" height="2" fill="currentColor" />
       {/* Board outline */}
       <rect x="3" y="3" width="10" height="12" fill="currentColor" />
       {/* Document content lines */}
-      <rect x="5" y="6" width="6" height="1" fill="var(--paper, #ffffff)" />
-      <rect x="5" y="8" width="6" height="1" fill="var(--paper, #ffffff)" />
-      <rect x="5" y="10" width="4" height="1" fill="var(--paper, #ffffff)" />
+      <rect x="5" y="6" width="6" height="1" fill="var(--bg)" />
+      <rect x="5" y="8" width="6" height="1" fill="var(--bg)" />
+      <rect x="5" y="10" width="4" height="1" fill="var(--bg)" />
     </svg>
   );
 }

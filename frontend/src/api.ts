@@ -2,15 +2,25 @@ import type { Run, SampleCase, Extraction, Encounter } from "./types";
 
 export const apiBase = import.meta.env.VITE_API_BASE ?? "";
 let csrfToken = "";
+let expectedAccount = "";
+const sessionChannel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("mededge-session");
+export const announceSessionChange = () => sessionChannel?.postMessage("changed");
+export const onSessionChange = (handler: () => void) => {
+  if (!sessionChannel) return () => {};
+  sessionChannel.addEventListener("message", handler);
+  return () => sessionChannel.removeEventListener("message", handler);
+};
 export const setCsrfToken = (token: string) => { csrfToken = token; };
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) { super(message); this.status = status; }
+  retryAfter: number;
+  constructor(message: string, status: number, retryAfter = 0) { super(message); this.status = status; this.retryAfter = retryAfter; }
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
+  if (expectedAccount && path !== "/api/auth/me") headers.set("X-MedEdge-Account", expectedAccount);
   if (init.method && init.method !== "GET" && csrfToken) headers.set("X-CSRF-Token", csrfToken);
   let response: Response;
   try {
@@ -25,7 +35,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       if (typeof body.detail === "string") message = body.detail;
       else if (Array.isArray(body.detail)) message = body.detail.map((item) => item.msg).filter(Boolean).join(". ") || message;
     } catch { /* keep the safe fallback */ }
-    throw new ApiError(message, response.status);
+    if (response.status === 409 && message.includes("active account changed")) window.dispatchEvent(new Event("mededge-session-invalidated"));
+    throw new ApiError(message, response.status, Number(response.headers.get("Retry-After")) || 0);
   }
   return response.json() as Promise<T>;
 }
@@ -43,21 +54,21 @@ export interface User { id: string; full_name: string; email: string; role: User
 interface Session { user: User; csrf_token: string }
 type Message = { message: string };
 
-export async function getSession(): Promise<User | null> {
-  try { const data = await request<Session>("/api/auth/me"); setCsrfToken(data.csrf_token); return data.user; }
-  catch (error) { if (error instanceof ApiError && error.status === 401) { setCsrfToken(""); return null; } throw error; }
+export async function getSession(probe = false, requiredAccount?: string): Promise<User | null> {
+  try { const data = await request<Session>("/api/auth/me"); if (requiredAccount && data.user.id !== requiredAccount) throw new ApiError("Your active account changed.", 409); if (!probe) { setCsrfToken(data.csrf_token); expectedAccount = data.user.id; } return data.user; }
+  catch (error) { if (error instanceof ApiError && error.status === 401) { if (!probe) { setCsrfToken(""); expectedAccount = ""; } return null; } throw error; }
 }
 export async function login(email: string, password: string, remember: boolean): Promise<User> {
   const data = await post<Session>("/api/auth/login", { email, password, remember });
-  setCsrfToken(data.csrf_token); return data.user;
+  setCsrfToken(data.csrf_token); expectedAccount = data.user.id; announceSessionChange(); return data.user;
 }
 export const register = (data: { full_name: string; email: string; password: string; role: UserRole }) => post<Message>("/api/auth/register", data);
 export const verifyEmail = (token: string, password: string) => post<Message>("/api/auth/verify", { token, password });
 export const resendVerification = (email: string) => post<Message>("/api/auth/resend-verification", { email });
 export const forgotPassword = (email: string) => post<Message>("/api/auth/forgot-password", { email });
 export const resetPassword = (token: string, password: string) => post<Message>("/api/auth/reset-password", { token, password });
-export const changePassword = (current_password: string, new_password: string) => post<Message>("/api/auth/change-password", { current_password, new_password });
-export async function logout(all = false): Promise<void> { await post<Message>(all ? "/api/auth/logout-all" : "/api/auth/logout"); setCsrfToken(""); }
+export async function changePassword(current_password: string, new_password: string): Promise<Message> { const result = await post<Message>("/api/auth/change-password", { current_password, new_password }); setCsrfToken(""); expectedAccount = ""; announceSessionChange(); return result; }
+export async function logout(all = false): Promise<void> { await post<Message>(all ? "/api/auth/logout-all" : "/api/auth/logout"); setCsrfToken(""); expectedAccount = ""; announceSessionChange(); }
 
 export async function listCases(): Promise<SampleCase[]> { return (await request<{ cases: SampleCase[] }>("/api/cases")).cases; }
 export interface Demo { id: string; title: string; kind: string; summary: string; image_url: string; extraction: Extraction; encounter: Encounter; bundle: Record<string, unknown>; replay: boolean }

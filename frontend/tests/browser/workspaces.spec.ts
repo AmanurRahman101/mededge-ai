@@ -41,7 +41,7 @@ test("doctor workspace: modular desktop/mobile, both themes, source and editable
     await page
       .locator(".workspace-grid")
       .evaluate((el) => el.getBoundingClientRect().width),
-  ).toBeGreaterThan(1300);
+  ).toBeLessThanOrEqual(1200);
   await mkdir("../scripts/out/ui", { recursive: true });
   for (const theme of ["dark", "light"]) {
     await page.evaluate(
@@ -172,4 +172,21 @@ test("patient: manage dropdown closes, summary and record tabs in both themes", 
     page.getByRole("button", { name: /FHIR|How this record/ }),
   ).toHaveCount(0);
   await noOverflow(page);
+});
+
+
+test("published notes print with light contrast and stale account tabs pause", async ({page,context}) => {
+  await session(context,"patient");
+  await page.goto("/patient/records/ui-report");
+  await expect(page.locator(".published-note")).toBeVisible();
+  await page.emulateMedia({media:"print"});
+  const colors = await page.locator(".published-note").evaluate(el => ({bg:getComputedStyle(el).backgroundColor,color:getComputedStyle(el).color}));
+  expect(colors.bg).toBe("rgb(255, 255, 255)");
+  expect(colors.color).toBe("rgb(17, 17, 17)");
+  await page.pdf({path:"../scripts/out/ui/published-note.pdf",printBackground:true});
+  await page.emulateMedia({media:"screen"});
+  await context.addCookies([{name:"mededge_session",value:"ui-doctor",url:"http://127.0.0.1:8023"}]);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.getByRole("heading",{name:"Account changed",exact:true})).toBeVisible();
+  await expect(page.locator("main")).not.toBeVisible();
 });

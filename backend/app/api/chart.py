@@ -91,6 +91,7 @@ class RecordUpdate(BaseModel):
 
 
 class SummaryUpdate(BaseModel):
+    expected_revision: int = Field(ge=1)
     summary_en: str = Field(min_length=1, max_length=12000)
     summary_bn: str = Field(min_length=1, max_length=12000)
     transcript: str = Field(min_length=1, max_length=20000)
@@ -826,6 +827,7 @@ def summaries(run_id: str, request: Request):
             "summaries": [
                 {
                     "id": s.id,
+                    "revision": s.revision,
                     "author_id": s.author_id,
                     "author_name": authors.get(s.author_id, "Doctor"),
                     "amends_id": s.amends_id,
@@ -874,22 +876,36 @@ async def save_summary(
             raise HTTPException(422, "Review both versions of the note before publishing.")
         if publish and summary.unresolved not in ("", "[]") and not body.acknowledge_unresolved:
             raise HTTPException(422, "Review and acknowledge unresolved details.")
-        summary.summary_en = body.summary_en.strip()
-        summary.summary_bn = body.summary_bn.strip()
-        summary.transcript = body.transcript.strip()
-        if not summary.summary_en or not summary.summary_bn or not summary.transcript:
+        values = {
+            "summary_en": body.summary_en.strip(),
+            "summary_bn": body.summary_bn.strip(),
+            "transcript": body.transcript.strip(),
+            "revision": ClinicalSummary.revision + 1,
+        }
+        if not values["summary_en"] or not values["summary_bn"] or not values["transcript"]:
             raise HTTPException(422, "Both summaries and transcript are required.")
         if publish:
-            summary.status = "published"
-            summary.published_at = datetime.now(UTC)
+            values.update(status="published", published_at=datetime.now(UTC))
+        changed = session.exec(
+            update(ClinicalSummary)
+            .where(
+                ClinicalSummary.id == summary_id,
+                ClinicalSummary.status == "draft",
+                ClinicalSummary.revision == body.expected_revision,
+            )
+            .values(**values)
+            .returning(ClinicalSummary.revision)
+        ).scalar_one_or_none()
+        if changed is None:
+            raise HTTPException(409, "This draft changed elsewhere. Reload it before saving.")
+        if publish:
             activity(session, row.owner_id, doctor.id, "summary_published", run_id)
-        session.add(summary)
         session.commit()
     if publish:
         from app.pipeline.chart_digest import schedule_digest
 
         schedule_digest(request.app, row.owner_id)
-    return {"status": "published" if publish else "draft"}
+    return {"status": "published" if publish else "draft", "revision": changed}
 
 
 @router.post("/records/{run_id}/summaries/{summary_id}/amend")

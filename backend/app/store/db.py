@@ -85,6 +85,7 @@ class ClinicalSummary(SQLModel, table=True):
     created_at: datetime
     published_at: datetime | None = None
     amends_id: str | None = Field(default=None, foreign_key="clinicalsummary.id")
+    revision: int = Field(default=1, nullable=False)
 
 
 class ChartDigest(SQLModel, table=True):

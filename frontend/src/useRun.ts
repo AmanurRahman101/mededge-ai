@@ -14,6 +14,11 @@ export function useRun(runId: string | null) {
     if (!runId) return;
     let stopped = false;
     let source: EventSource | null = null;
+    let reconnect = () => {};
+    const pause = () => { source?.close(); source = null; };
+    const resume = () => reconnect();
+    window.addEventListener("mededge-session-pause", pause);
+    window.addEventListener("mededge-session-resume", resume);
     async function refresh() {
       const next = await getRun(runId!);
       if (!stopped) setRun(next);
@@ -46,11 +51,12 @@ export function useRun(runId: string | null) {
           }).catch(() => { if (!stopped) setError("Connection interrupted. Refresh this page to try again."); });
         };
       };
+      reconnect = () => { void refresh().then(latest => { if (!stopped && !source && !complete.has(latest.status)) connect(); }).catch(() => { if (!stopped) setError("Unable to refresh the record."); }); };
       connect();
     }).catch((caught) => {
       if (!stopped) setError(caught instanceof Error ? caught.message : "Unable to open record.");
     });
-    return () => { stopped = true; source?.close(); };
+    return () => { stopped = true; source?.close(); window.removeEventListener("mededge-session-pause", pause); window.removeEventListener("mededge-session-resume", resume); };
   }, [runId]);
 
   return { run, setRun, events, error, setError };

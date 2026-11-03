@@ -15,6 +15,8 @@ from sqlmodel import select
 from app import demo
 from app.auth.email import enforce_cooldown, send_auth_mail
 from app.auth.security import (
+    check_throttle,
+    clear_throttle,
     client_key,
     cookie_name,
     digest,
@@ -148,13 +150,15 @@ async def register(body: Registration, request: Request) -> dict:
 async def login(body: Login, request: Request, response: Response) -> dict:
     verify_request(request)
     throttle(request, "login-ip", client_key(request), 10, 60)
-    throttle(request, "login-email", body.email, 10, 900)
+    check_throttle(request, "login-failure", body.email, 10, 900)
     user = get_by_email(request, body.email)
     valid = await verify_password(body.password, user.password_hash if user else DUMMY_HASH)
     if not user or not valid:
+        throttle(request, "login-failure", body.email, 10, 900)
         raise HTTPException(status_code=401, detail="Email or password is incorrect.")
     if not user.verified:
         raise HTTPException(status_code=403, detail="Please verify your email before signing in.")
+    clear_throttle(request, "login-failure", body.email)
     token = secrets.token_urlsafe(32)
     csrf = secrets.token_urlsafe(32)
     max_age = int(

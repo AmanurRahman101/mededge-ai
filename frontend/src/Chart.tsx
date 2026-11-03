@@ -3,10 +3,11 @@ import {
   PixelDocument as ClipboardText,
   PixelShield as ShieldCheck,
   PixelVisit as Users,
+  PixelVitals,
   PixelWorkspaceIcon,
 } from "./PixelIcons";
 import { ChartOverview, recordStatus } from "./ChartOverview";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { deleteChart, getChart, post, updateChart } from "./api";
 import { navigate } from "./navigation";
 import { useApp } from "./store";
@@ -42,15 +43,43 @@ const activityText: Record<string, string> = {
   summary_published: "Doctor published a note",
 };
 
+type PatientTab = "records" | "doctors" | "activity" | "summary";
+function currentTab(): PatientTab {
+  const value = new URLSearchParams(window.location.search).get("tab");
+  return value === "doctors" || value === "activity" || value === "summary" ? value : "records";
+}
+function RecordMenu({ children }: { children: ReactNode }) {
+  const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    function onPointer(event: PointerEvent) {
+      if (menu.current?.open && !menu.current.contains(event.target as Node)) menu.current.open = false;
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape" && menu.current?.open) {
+        menu.current.open = false;
+        menu.current.querySelector("summary")?.focus();
+        event.preventDefault();
+      }
+    }
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("pointerdown", onPointer); document.removeEventListener("keydown", onKey); };
+  }, []);
+  return <details ref={menu} className="record-manage"><summary>Manage</summary><div onClick={event => { if ((event.target as HTMLElement).closest("button") && menu.current) menu.current.open = false; }}>{children}</div></details>;
+}
+
 export function PatientChart() {
   const user = useApp((state) => state.user);
-  const [tab, setTab] = useState<
-    "records" | "doctors" | "activity" | "summary"
-  >(
-    new URLSearchParams(window.location.search).get("tab") === "doctors"
-      ? "doctors"
-      : "records",
-  );
+  const [tab, setTab] = useState<PatientTab>(currentTab);
+  useEffect(() => {
+    const sync = () => setTab(currentTab());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+  function selectTab(next: PatientTab) {
+    if (next === tab && currentTab() === next) return;
+    navigate(next === "records" ? "/patient" : `/patient?tab=${next}`);
+  }
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
@@ -175,14 +204,14 @@ export function PatientChart() {
         <button
           type="button"
           aria-current={tab === "records" ? "page" : undefined}
-          onClick={() => setTab("records")}
+          onClick={() => selectTab("records")}
         >
           <ClipboardText size={18} /> My records
         </button>
         <button
           type="button"
           aria-current={tab === "doctors" ? "page" : undefined}
-          onClick={() => setTab("doctors")}
+          onClick={() => selectTab("doctors")}
         >
           <Users size={18} /> Doctors & consent{" "}
           {connections.some((c) => c.status === "pending") && (
@@ -192,14 +221,14 @@ export function PatientChart() {
         <button
           type="button"
           aria-current={tab === "summary" ? "page" : undefined}
-          onClick={() => setTab("summary")}
+          onClick={() => selectTab("summary")}
         >
-          <Users size={18} /> My summary
+          <PixelVitals size={18} /> My summary
         </button>
         <button
           type="button"
           aria-current={tab === "activity" ? "page" : undefined}
-          onClick={() => setTab("activity")}
+          onClick={() => selectTab("activity")}
         >
           <ShieldCheck size={18} /> Activity
         </button>
@@ -215,7 +244,7 @@ export function PatientChart() {
         <section className="chart-section">
           <div className="chart-heading">
             <div>
-              <h2>My records</h2>
+              <h2>Your reports</h2>
               <p className="lede">
                 Open a record to see its reading and your doctor’s notes.
               </p>
@@ -345,9 +374,7 @@ export function PatientChart() {
                     )}
                   </div>
                   <div className="record-actions">
-                    <details className="record-manage">
-                      <summary>Manage</summary>
-                      <div>
+                    <RecordMenu>
                         <button
                           className="text-link"
                           type="button"
@@ -389,8 +416,7 @@ export function PatientChart() {
                         >
                           Delete
                         </button>
-                      </div>
-                    </details>
+                    </RecordMenu>
                     <button
                       className="record-open"
                       type="button"
