@@ -5,7 +5,6 @@ import type { ClinicalSummary, SampleCase } from "./types";
 import { useRun } from "./useRun";
 import { navigate } from "./navigation";
 import { prepareImage } from "./image";
-import { FhirView, TracePanel } from "./Trace";
 
 export function Patient({ initialRunId = null }: { initialRunId?: string | null }) {
   const setScreen = useApp((state) => state.setScreen);
@@ -137,7 +136,7 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
         </div>
       )}
 
-      {run && !waiting && !ready && <><p className="lede" role="status">{events.at(-1)?.message ?? "Working through the page."}</p><TracePanel run={run} live={events} /></>}
+      {run && !waiting && !ready && <p className="lede" role="status">{events.at(-1)?.message ?? "Working through the page."}</p>}
 
       {run && ready && run.extraction && (
         <div className="stack">
@@ -184,8 +183,6 @@ export function Patient({ initialRunId = null }: { initialRunId?: string | null 
             </section>
           )}
           {!run.replay && <p className="banner review">AI readings can miss or misread details. Check the original with a clinician before using this result.</p>}
-          <TracePanel run={run} live={events} />
-          <FhirView bundle={run.bundle} />
           {summaries.filter(item => item.status === "published").map(item => <article className="published-note" key={item.id}>
             <p className="chart-eyebrow">DOCTOR’S DICTATED NOTE</p><h2>{item.amends_id ? "Updated note from your doctor" : "Your doctor’s dictated note"}</h2>
             <p className="lede">{item.author_name || "Doctor"} · {new Date(item.published_at || item.created_at).toLocaleDateString()} · Doctor account is self-declared · Spoken by the doctor, transcribed and translated by Muse Voice and Muse Spark, reviewed and published by the doctor</p>
