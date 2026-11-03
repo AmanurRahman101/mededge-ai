@@ -127,7 +127,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
             response.headers.setdefault(
                 "Content-Security-Policy",
-                "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; "
+                "default-src 'self'; font-src 'self' data:; img-src 'self' blob: data:; media-src 'self' blob:; "
                 "style-src 'self' 'unsafe-inline'; connect-src 'self'; "
                 "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
             )

@@ -201,3 +201,14 @@ def test_legacy_record_share_cannot_bypass_patient_consent(access_client):
     assert client.post("/api/share/redeem", json={"code": "ABC234"}).status_code == 410
     assert client.get("/api/runs/record").status_code == 404
 
+
+
+def test_production_csp_allows_bundled_inline_fonts(access_client):
+    settings = access_client.app.state.settings
+    original = settings.app_env
+    settings.app_env = "production"
+    try:
+        response = access_client.get("/api/health")
+        assert "font-src 'self' data:" in response.headers["content-security-policy"]
+    finally:
+        settings.app_env = original
