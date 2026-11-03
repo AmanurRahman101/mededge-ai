@@ -356,7 +356,7 @@ export function ChartOverview({
             )}
           </details>
           <details className="overview-provisional">
-            <summary>Unreviewed image readings</summary>
+            <summary>Medications and tests from reports (unreviewed)</summary>
             <div className="overview-readings">
               <section>
                 <h3>
