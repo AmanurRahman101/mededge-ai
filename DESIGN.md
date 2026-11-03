@@ -8,13 +8,13 @@ Keep Geist for body text and headings, Geist Mono for connection codes. Body tex
 
 ## Layout
 
-Workspaces use up to 1480px with 32px desktop gutters. The doctor workspace has a 264px patient directory and a flexible chart column. Summary, History and Add report & note are separate sections. At 760px the directory stacks above the chart and allows horizontal patient selection. Forms and bilingual editors use two columns on laptops and one on phones. No desktop workflow is constrained to a phone-width column.
+Workspaces use centered 1200px containers; desktop document review uses up to 1440px. The doctor workspace has a 264px patient directory and a flexible chart column. Summary, History and Add report & note are separate sections. At 760px the directory stacks above the chart and allows horizontal patient selection. Forms and bilingual editors use two columns on laptops and one on phones. No desktop workflow is constrained to a phone-width column.
 
-Patient navigation separates My records, Doctors & consent, My summary and Activity. Report management is a native details menu that can be opened and closed. Record pages separate Doctor notes, Report reading, and Image & recording. Privacy review keeps its confirmation beside the preview; confirmation stays disabled until the image loads.
+Patient navigation separates My records, My doctors and My summary. Search stays visible on the records page; advanced filters remain optional. Activity is not part of the primary patient flow. Report management is a native details menu that can be opened and closed. Record pages separate Doctor notes, Report reading, and Image & recording. Privacy review keeps its confirmation beside the preview; confirmation stays disabled until the image loads.
 
 ## Summary hierarchy
 
-The patient-wide overview appears first, in English or Bangla, with source links. It is automatically generated from published doctor notes only, with no second verification step. Latest amendments replace superseded text in the overview. Source notes and provisional image readings remain separate expandable sections. Provisional OCR never becomes an input to the combined narrative. Historical medicines must not be described as current without explicit supporting documentation.
+The patient summary is a coherent plain-language narrative in English or Bangla, without source-link clutter or categorized fragments. Internal provenance stays available to doctors. It is automatically generated from published doctor notes only, with no second verification step. Latest amendments replace superseded text in the overview. Patient source notes, provisional image readings and the report index live in a dedicated Detailed history view. The summary links to that view once. Provisional OCR never becomes an input to the combined narrative. Historical medicines must not be described as current without explicit supporting documentation.
 
 ## Controls
 
@@ -23,3 +23,7 @@ Use 8px button corners, 10px panels and 1px zinc separators. Keep one primary ne
 ## Verification
 
 Browser journeys use a fictional local SQLite fixture and fake model provider. Test desktop and phone sizes in both themes, dropdown closing, privacy preview, saved drafts, publication, and automatic summary updates. Backend coverage checks consent, cache invalidation, revocation during generation, deletion, amendments and provider failure. Do not use real patient documents in test fixtures.
+
+## Current medicines
+
+The patient summary shows an explicitly patient-reported current-medicines list, with name/strength, optional instructions and confirmation date. Historical prescriptions never automatically become active medicines. Patients can add or remove entries; consented doctors can read the list but cannot rewrite the patient’s report of current use. List operations do not call a model.

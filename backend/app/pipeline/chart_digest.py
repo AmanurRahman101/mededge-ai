@@ -21,7 +21,14 @@ class DigestItem(BaseModel):
 
 
 class DigestResult(BaseModel):
+    narrative_en: str = Field(min_length=1, max_length=12000)
+    narrative_bn: str = Field(min_length=1, max_length=12000)
     items: list[DigestItem]
+
+
+def source_fingerprint(source):
+    encoded = json.dumps(source, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(("narrative-v2:" + encoded).encode()).hexdigest()
 
 
 def inputs(db, patient_id):
@@ -44,14 +51,18 @@ def inputs(db, patient_id):
             for n in notes
             if n.id not in replaced
         ]
-    encoded = json.dumps(source, ensure_ascii=False, sort_keys=True)
-    return hashlib.sha256(encoded.encode()).hexdigest(), source
+    return source_fingerprint(source), source
 
 
 def public(digest):
+    payload = json.loads(digest.items_json)
+    if isinstance(payload, list):  # Old categorized caches regenerate under the v2 fingerprint.
+        payload = {"items": payload}
     return {
         "status": digest.status,
-        "items": json.loads(digest.items_json),
+        "items": payload.get("items", []),
+        "narrative_en": payload.get("narrative_en", ""),
+        "narrative_bn": payload.get("narrative_bn", ""),
         "updated_at": digest.updated_at.isoformat(),
     }
 
@@ -67,7 +78,7 @@ async def _generate(app, patient_id, retry=False):
             and not (retry and current.status == "failed")
         ):
             return public(current)
-    status, items = "empty", []
+    status, payload = "empty", {"items": []}
     if source:
         try:
             if db.spent_today() >= app.state.settings.daily_budget_usd:
@@ -84,6 +95,16 @@ async def _generate(app, patient_id, retry=False):
                     "negation, medication names, dose strings, strengths and durations exactly. "
                     "Do not call a historical medicine current without explicit recent evidence. "
                     "Date changes and contradictions; never resolve them by guessing. "
+                    "Write narrative_en and narrative_bn as a coherent plain-language health story "
+                    "for the patient, integrating the entire supplied history, recent changes and "
+                    "the latest assessment. Use short paragraphs and everyday language. "
+                    "No headings, "
+                    "citations, report references, numbered lists or commentary "
+                    "about summarization "
+                    "in the narrative. Explain medical terms briefly without adding facts. "
+                    "A medicine mentioned in a past note does not establish current consumption. "
+                    "Describe it as historical unless the reviewed note "
+                    "explicitly establishes otherwise. "
                     "Group non-duplicated items as assessment, medicines, tests or care. "
                     "For EVERY item cite one or more supplied note ids in source_ids. "
                     "Provide matching English and Bengali descriptions. Omit absent categories."
@@ -94,7 +115,7 @@ async def _generate(app, patient_id, retry=False):
             allowed = {n["id"] for n in source}
             if any(not set(i.source_ids).issubset(allowed) for i in result.value.items):
                 raise ValueError("Invalid summary sources")
-            items = [i.model_dump() for i in result.value.items]
+            payload = result.value.model_dump()
             db.add_spend(0.04)
             status = "ready"
         except Exception:
@@ -112,7 +133,7 @@ async def _generate(app, patient_id, retry=False):
             )
         current.fingerprint = fingerprint
         current.status = status
-        current.items_json = json.dumps(items, ensure_ascii=False)
+        current.items_json = json.dumps(payload, ensure_ascii=False)
         current.updated_at = now
         session.add(current)
         session.commit()

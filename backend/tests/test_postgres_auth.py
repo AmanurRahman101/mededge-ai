@@ -6,7 +6,7 @@ import subprocess
 import sys
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier
 from types import SimpleNamespace
@@ -17,10 +17,18 @@ from fastapi.testclient import TestClient
 from sqlalchemy import delete
 
 from app.auth.email import _reserve
+from app.auth.security import digest
 from app.config import Settings
 from app.main import create_app
 from app.pipeline.chart_digest import DigestItem, DigestResult
-from app.store.db import AuthCounter, AuthUser, ChartConnection, ClinicalSummary, RunRow
+from app.store.db import (
+    AuthCounter,
+    AuthSession,
+    AuthUser,
+    ChartConnection,
+    ClinicalSummary,
+    RunRow,
+)
 
 PG_URL = os.environ.get("TEST_POSTGRES_URL")
 pytestmark = pytest.mark.skipif(not PG_URL, reason="TEST_POSTGRES_URL is not configured")
@@ -117,6 +125,8 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
             calls.append(1)
             return SimpleNamespace(
                 value=DigestResult(
+                    narrative_en="Fictional health narrative",
+                    narrative_bn="কাল্পনিক স্বাস্থ্য বিবরণ",
                     items=[
                         DigestItem(
                             category="assessment",
@@ -124,7 +134,7 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
                             text_bn="কাল্পনিক নোট",
                             source_ids=[note_id],
                         )
-                    ]
+                    ],
                 )
             )
 
@@ -134,7 +144,34 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
         assert client.post(path).json()["status"] == "ready"
         assert client.post(path).json()["status"] == "ready"
         assert len(calls) == 1
+        # The additive medicine migration supports durable patient-reported use.
+        doctor_cookie = client.cookies.get("mededge_session")
+        doctor_csrf = client.headers["x-csrf-token"]
+        patient_token = uuid.uuid4().hex
+        with client.app.state.db.session() as session:
+            session.add(
+                AuthSession(
+                    id=digest(patient_token),
+                    user_id=patient_id,
+                    csrf_token="fictional-csrf",
+                    expires_at=now + timedelta(hours=1),
+                )
+            )
+            session.commit()
+        client.cookies.clear()
+        client.cookies.set("mededge_session", patient_token)
+        client.headers["x-csrf-token"] = "fictional-csrf"
+        medicines_path = f"/api/chart/patients/{patient_id}/medicines"
+        medicine = {"id": uuid.uuid4().hex, "name": "Fictional medicine 5 mg"}
+        assert client.post(medicines_path, json=medicine).status_code == 200
+        assert client.post(medicines_path, json=medicine).status_code == 200
+        assert len(client.get(medicines_path).json()["medicines"]) == 1
+        client.cookies.clear()
+        client.cookies.set("mededge_session", doctor_cookie)
+        client.headers["x-csrf-token"] = doctor_csrf
+        assert client.get(medicines_path).status_code == 200
         assert client.post(f"/api/chart/connections/{patient_id}/revoke").status_code == 200
+        assert client.get(medicines_path).status_code == 404
         assert client.get(path).status_code == 404
         assert client.post(path).status_code == 404
 

@@ -107,6 +107,8 @@ async def test_digest_cache_coalesces_calls_survives_restart_and_excludes_ocr(re
         await asyncio.sleep(0)
         return SimpleNamespace(
             value=DigestResult(
+                narrative_en="Fictional patient health story",
+                narrative_bn="রোগীর কাল্পনিক স্বাস্থ্যের বিবরণ",
                 items=[
                     DigestItem(
                         category="assessment",
@@ -114,7 +116,7 @@ async def test_digest_cache_coalesces_calls_survives_restart_and_excludes_ocr(re
                         text_bn="কাল্পনিক নোট",
                         source_ids=["note"],
                     )
-                ]
+                ],
             )
         )
 
@@ -123,6 +125,8 @@ async def test_digest_cache_coalesces_calls_survives_restart_and_excludes_ocr(re
         ensure_digest(c.app, "patient1"), ensure_digest(c.app, "patient1")
     )
     assert all(r["status"] == "ready" for r in results)
+    assert results[0]["narrative_en"] == "Fictional patient health story"
+    assert results[0]["narrative_bn"] == "রোগীর কাল্পনিক স্বাস্থ্যের বিবরণ"
     assert len(calls) == 1
     assert "UNVERIFIED" not in calls[0]["parts"][0].text
     c.app.state.chart_digest_tasks = {}  # Application restarted, DB cache persists.
@@ -144,6 +148,8 @@ async def test_deletion_during_inference_does_not_persist_deleted_content(reques
             session.commit()
         return SimpleNamespace(
             value=DigestResult(
+                narrative_en="Fictional patient health story",
+                narrative_bn="রোগীর কাল্পনিক স্বাস্থ্যের বিবরণ",
                 items=[
                     DigestItem(
                         category="assessment",
@@ -151,7 +157,7 @@ async def test_deletion_during_inference_does_not_persist_deleted_content(reques
                         text_bn="নোট",
                         source_ids=["note"],
                     )
-                ]
+                ],
             )
         )
 
@@ -171,6 +177,8 @@ async def test_invalid_sources_and_provider_failure_preserve_notes(request):
         calls += 1
         return SimpleNamespace(
             value=DigestResult(
+                narrative_en="Fictional patient health story",
+                narrative_bn="রোগীর কাল্পনিক স্বাস্থ্যের বিবরণ",
                 items=[
                     DigestItem(
                         category="care",
@@ -178,7 +186,7 @@ async def test_invalid_sources_and_provider_failure_preserve_notes(request):
                         text_bn="নোট",
                         source_ids=["other"],
                     )
-                ]
+                ],
             )
         )
 
@@ -197,7 +205,11 @@ def test_revocation_while_digest_runs_denies_response(request):
 
     async def provider(*args, **kwargs):
         connection(c, "revoked")
-        return SimpleNamespace(value=DigestResult(items=[]))
+        return SimpleNamespace(
+            value=DigestResult(
+                narrative_en="Fictional story", narrative_bn="কাল্পনিক বিবরণ", items=[]
+            )
+        )
 
     c.app.state.router.structured = provider
     assert c.post("/api/chart/patients/patient1/summary").status_code == 404
@@ -221,7 +233,11 @@ def test_delete_removes_cached_digest_and_sources(request):
     assert c.delete("/api/chart/records/record").status_code == 200
     with c.app.state.db.session() as s:
         cache = s.get(ChartDigest, "patient1")
-        assert cache is None or cache.items_json == "[]"
+        assert (
+            cache is None
+            or cache.status == "empty"
+            and "Deleted clinical text" not in cache.items_json
+        )
     assert c.get("/api/chart/patients/patient1/summary").json()["record_count"] == 0
 
 
@@ -234,7 +250,11 @@ async def test_explicit_retry_recovers_failed_summary(request):
         calls.append(1)
         if len(calls) == 1:
             raise TimeoutError("Fictional provider timeout")
-        return SimpleNamespace(value=DigestResult(items=[]))
+        return SimpleNamespace(
+            value=DigestResult(
+                narrative_en="Fictional story", narrative_bn="কাল্পনিক বিবরণ", items=[]
+            )
+        )
 
     c.app.state.router.structured = provider
     assert (await ensure_digest(c.app, "patient1"))["status"] == "failed"
@@ -284,6 +304,8 @@ async def test_patient_card_uses_fresh_cached_full_summary(request):
     async def provider(*args, **kwargs):
         return SimpleNamespace(
             value=DigestResult(
+                narrative_en="Fictional patient health story",
+                narrative_bn="রোগীর কাল্পনিক স্বাস্থ্যের বিবরণ",
                 items=[
                     DigestItem(
                         category="assessment",
@@ -291,7 +313,7 @@ async def test_patient_card_uses_fresh_cached_full_summary(request):
                         text_bn="ইতিহাস",
                         source_ids=["note"],
                     )
-                ]
+                ],
             )
         )
 
@@ -300,7 +322,7 @@ async def test_patient_card_uses_fresh_cached_full_summary(request):
     sign_in(c, "doctor")
     assert (
         c.get("/api/chart/connections").json()["connections"][0]["patient_summary"]
-        == "Combined verified history"
+        == "Fictional patient health story"
     )
     note(c, "new-note")
     assert c.get("/api/chart/connections").json()["connections"][0]["patient_summary"] is None

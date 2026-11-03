@@ -1,7 +1,6 @@
 """Patient-controlled chart connections and history."""
 
 import asyncio
-import hashlib
 import json
 import re
 import secrets
@@ -17,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
 from app import demo
+from app.api.current_medicines import router as medicines_router
 from app.auth.security import client_key, digest, require_role, require_user, throttle
 from app.store.db import (
     AuthUser,
@@ -31,6 +31,7 @@ from app.store.db import (
 )
 
 router = APIRouter(prefix="/api/chart", tags=["chart"])
+router.include_router(medicines_router)
 CONSENT_VERSION = "chart-access-v2"
 ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CONSENT_SCOPE = "whole_chart,contribute,review,approve,download,meta_image_voice"
@@ -216,14 +217,14 @@ def connections(request: Request):
                         for n, owner in reversed(notes)
                         if owner == digest_row.patient_id and n.id not in replaced
                     ]
-                    fingerprint = hashlib.sha256(
-                        json.dumps(source, ensure_ascii=False, sort_keys=True).encode()
-                    ).hexdigest()
+                    from app.pipeline.chart_digest import source_fingerprint
+
+                    fingerprint = source_fingerprint(source)
                     if digest_row.status == "ready" and digest_row.fingerprint == fingerprint:
                         try:
-                            items = json.loads(digest_row.items_json)
-                            text = " ".join(
-                                item.get("text_en", "") for item in items if isinstance(item, dict)
+                            payload = json.loads(digest_row.items_json)
+                            text = (
+                                payload.get("narrative_en", "") if isinstance(payload, dict) else ""
                             )
                             if text.strip():
                                 patient_summaries[digest_row.patient_id] = text[:240]

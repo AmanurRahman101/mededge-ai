@@ -16,6 +16,11 @@ async function noOverflow(page: Page) {
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,
     ),
   ).toBe(true);
+  const clipped = await page.locator("button, input:not([type=file]), select, summary").evaluateAll(elements => elements.filter(element => {
+    const rect = element.getBoundingClientRect();
+    return element.getClientRects().length > 0 && rect.width > 2 && (rect.left < -1 || rect.right > window.innerWidth + 1);
+  }).map(element => element.textContent?.trim() || element.getAttribute("aria-label") || element.tagName));
+  expect(clipped).toEqual([]);
 }
 
 test("doctor workspace: modular desktop/mobile, both themes, source and editable note", async ({
@@ -124,6 +129,16 @@ test("patient: manage dropdown closes, summary and record tabs in both themes", 
 }) => {
   await session(context, "patient");
   await page.goto("/patient");
+  await expect(page.getByRole("searchbox")).toBeVisible();
+  for (const width of [320, 375, 390, 768, 831, 1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.locator(".patient-tools > summary").click();
+    await expect(page.getByRole("combobox", { name: "Type", exact: true })).toBeVisible();
+    await noOverflow(page);
+    await page.locator(".patient-tools > summary").click();
+  }
+
+  await expect(page.getByText("See recent changes", { exact: true })).toHaveCount(0);
   const manage = page.locator(".record-manage").first();
   await manage.locator("summary").click();
   await expect(
@@ -134,7 +149,7 @@ test("patient: manage dropdown closes, summary and record tabs in both themes", 
     manage.getByRole("button", { name: "Rename", exact: true }),
   ).not.toBeVisible();
   await page.getByRole("button", { name: "My summary", exact: true }).click();
-  await expect(page.locator(".digest-sections")).toContainText(
+  await expect(page.locator(".health-narrative")).toContainText(
     "No fever reported",
   );
   for (const theme of ["dark", "light"]) {
@@ -154,6 +169,31 @@ test("patient: manage dropdown closes, summary and record tabs in both themes", 
       });
     }
   }
+  await expect(page.locator(".source-links")).toHaveCount(0);
+  await expect(page.getByText("What your doctor shared", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".overview-clinical")).toHaveCount(0);
+  await page.getByRole("button", { name: "Add a medicine", exact: true }).click();
+  await page.getByLabel("Medicine name and strength").fill("Fictional medicine 5 mg");
+  await page.getByLabel("How you take it").fill("Only as prescribed");
+  await page.getByRole("button", { name: "I take this medicine", exact: true }).click();
+  await expect(page.locator(".current-medicine-list")).toContainText("Fictional medicine 5 mg");
+  await page.reload();
+  await expect(page.locator(".health-narrative")).toContainText("No fever reported");
+  await expect(page.locator(".current-medicine-list")).toContainText("Fictional medicine 5 mg");
+  page.once("dialog", dialog => dialog.dismiss());
+  await page.getByRole("button", { name: "Remove Fictional medicine 5 mg from my list", exact: true }).click();
+  await expect(page.locator(".current-medicine-list")).toContainText("Fictional medicine 5 mg");
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Remove Fictional medicine 5 mg from my list", exact: true }).click();
+  await expect(page.locator(".current-medicine-list")).toHaveCount(0);
+  await page.getByRole("button", { name: "Detailed history", exact: true }).click();
+  await expect(page).toHaveURL(/tab=history/);
+  await expect(page.locator(".overview-clinical")).toBeVisible();
+  await expect(page.locator(".health-narrative")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Detailed history", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back to my summary", exact: true }).click();
+  await expect(page.locator(".health-narrative")).toBeVisible();
   await page.goto("/patient/records/ui-report");
   await expect(
     page.getByRole("heading", { name: "Your doctor's notes", exact: true }),

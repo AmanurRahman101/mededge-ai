@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChart, post } from "./api";
+import { CurrentMedicines } from "./CurrentMedicines";
 import { navigate } from "./navigation";
 import { PixelPill, PixelFlask, PixelVisit, PixelVitals } from "./PixelIcons";
 
@@ -32,6 +33,8 @@ type Snapshot = {
   published_note_count: number;
 };
 type Digest = {
+  narrative_en?: string;
+  narrative_bn?: string;
   status: string;
   updated_at: string | null;
   items: {
@@ -60,9 +63,11 @@ export function recordStatus(status: string) {
 export function ChartOverview({
   patientId,
   role,
+  detailsOnly = false,
 }: {
   patientId: string;
   role: "doctor" | "patient";
+  detailsOnly?: boolean;
 }) {
   const [data, setData] = useState<Snapshot | null>(null);
   const [error, setError] = useState("");
@@ -83,7 +88,7 @@ export function ChartOverview({
         );
         if (id !== sequence.current) return;
         setData(snapshot);
-        if (snapshot.published_note_count) {
+        if (snapshot.published_note_count && !detailsOnly) {
           setDigestLoading(true);
           void post<Digest>(
             `/api/chart/patients/${encodeURIComponent(patientId)}/summary${retry ? "?retry=true" : ""}`,
@@ -123,7 +128,7 @@ export function ChartOverview({
         if (id === sequence.current) setLoading(false);
       }
     },
-    [patientId],
+    [patientId, detailsOnly],
   );
   useEffect(() => {
     setData(null);
@@ -146,12 +151,32 @@ export function ChartOverview({
       {entry.title} · {new Date(entry.created_at).toLocaleDateString()}
     </button>
   );
+  if (role === "patient" && !detailsOnly) return (
+    <section className="patient-overview patient-summary" aria-label="Patient summary">
+      <div className="module-heading">
+        <h2>Your health summary</h2>
+        <div className="segmented" aria-label="Summary language">
+          <button type="button" aria-pressed={language === "en"} onClick={() => setLanguage("en")}>English</button>
+          <button type="button" aria-pressed={language === "bn"} onClick={() => setLanguage("bn")}>বাংলা</button>
+        </div>
+      </div>
+      {error && <p className="banner pii" role="alert">{error}</p>}
+      {(loading || digestLoading) && <p role="status">Updating your summary…</p>}
+      {digest?.status === "ready" && <p className="health-narrative" lang={language}>{language === "en" ? digest.narrative_en : digest.narrative_bn}</p>}
+      {!loading && data && !data.published_note_count && <p className="empty-inline">Your health summary will appear after your doctor reviews and publishes a note.</p>}
+      {digest && digest.status !== "ready" && <p role="status">Your summary is unavailable right now. You can still read your notes in detailed history.</p>}
+      {digest?.status === "failed" && <button className="secondary" type="button" disabled={digestLoading} onClick={() => void refresh(true)}>Try summary again</button>}
+      {error && <button className="secondary" type="button" onClick={() => void refresh()}>Try again</button>}
+      <CurrentMedicines key={patientId} patientId={patientId} editable />
+      <button className="secondary detailed-history-button" type="button" onClick={() => navigate("/patient?tab=history")}>Detailed history</button>
+    </section>
+  );
   return (
     <section className="patient-overview" aria-label="Patient summary">
       <div className="module-heading">
         <div>
           <h2>
-            {role === "patient" ? "Your health summary" : "Patient summary"}
+            {detailsOnly ? "Detailed history" : "Patient summary"}
           </h2>
           <p>
             All saved history, including archived reports. Updated from the
@@ -173,6 +198,7 @@ export function ChartOverview({
         </p>
       )}
       {loading && !data && <p role="status">Loading the full history…</p>}
+      {detailsOnly && <button className="text-link" type="button" onClick={() => navigate("/patient?tab=summary")}>Back to my summary</button>}
       {data && (
         <>
           <p className="overview-caption">
@@ -181,7 +207,7 @@ export function ChartOverview({
             {data.published_note_count === 1 ? "note" : "notes"}. This covers
             records saved in MedEdge.
           </p>
-          <section className="verified-digest">
+          {!detailsOnly && <section className="verified-digest">
             <div className="module-heading">
               <div>
                 <h3>
@@ -304,7 +330,8 @@ export function ChartOverview({
                 Updated {new Date(digest.updated_at).toLocaleString()}
               </p>
             )}
-          </section>
+          </section>}
+          {role === "doctor" && <CurrentMedicines key={patientId} patientId={patientId} editable={false} />}
           <details className="overview-clinical">
             <summary>
               Read your doctor’s notes ({data.published_note_count})

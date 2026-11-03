@@ -7,3 +7,5 @@ Patients upload reports, review redaction, manage history and explicitly approve
 The UI uses Geist typography, zinc themes and pixel workspace/category icons. Patient cards lead to focused charts. Technical FHIR/trace controls are excluded. Shared demo accounts contain fictional examples. Public clinical-production readiness is not claimed.
 
 Authentication uses one active secure cookie session per browser. Existing tabs pause when the active account changes. Draft revisions prevent stale saves. No credentials or clinical drafts belong in browser persistent storage or test screenshots.
+
+The patient summary separates a plain-language, cached health narrative from detailed history. Patients maintain an explicit current-medicines list, visible to consented doctors and independent of past prescriptions. It records reported use, not a new prescription.

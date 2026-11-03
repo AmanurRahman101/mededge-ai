@@ -49,10 +49,10 @@ const activityText: Record<string, string> = {
   summary_published: "Doctor published a note",
 };
 
-type PatientTab = "records" | "doctors" | "activity" | "summary";
+type PatientTab = "records" | "doctors" | "activity" | "summary" | "history";
 function currentTab(): PatientTab {
   const value = new URLSearchParams(window.location.search).get("tab");
-  return value === "doctors" || value === "activity" || value === "summary"
+  return value === "doctors" || value === "activity" || value === "summary" || value === "history"
     ? value
     : "records";
 }
@@ -213,7 +213,7 @@ export function PatientChart() {
         <div className="workspace-title">
           <PixelWorkspaceIcon workspace="patient" size={42} />
           <div>
-            <h1>My reports</h1>
+            <h1>My health</h1>
             <p>{user?.full_name} · Your health information</p>
           </div>
         </div>
@@ -228,7 +228,7 @@ export function PatientChart() {
       <nav className="module-tabs" aria-label="Patient chart">
         <button
           type="button"
-          aria-current={tab === "records" ? "page" : undefined}
+          aria-current={(tab === "records" || tab === "history") ? "page" : undefined}
           onClick={() => selectTab("records")}
         >
           <ClipboardText size={18} /> My records
@@ -258,6 +258,8 @@ export function PatientChart() {
       )}
       {tab === "summary" && user ? (
         <ChartOverview patientId={user.id} role="patient" />
+      ) : tab === "history" && user ? (
+        <ChartOverview patientId={user.id} role="patient" detailsOnly />
       ) : tab === "records" ? (
         <section className="chart-section">
           <div className="chart-heading">
@@ -274,11 +276,10 @@ export function PatientChart() {
               Refresh
             </button>
           </div>
-          <details className="patient-tools">
-            <summary>Find a report or show hidden reports</summary>
+          <div className="patient-search-tools">
             <div className="chart-filters">
               <label>
-                Search titles
+                Find a report
                 <input
                   type="search"
                   value={search}
@@ -286,6 +287,7 @@ export function PatientChart() {
                   placeholder="Search your records"
                 />
               </label>
+              <details className="patient-tools"><summary>Filter reports</summary><div className="advanced-report-filters">
               <label>
                 Type
                 <select
@@ -327,10 +329,12 @@ export function PatientChart() {
                     setOffset(0);
                   }}
                 />{" "}
-                Archived
+                Show archived reports
               </label>
+              </div></details>
             </div>
-          </details>
+          </div>
+          <button className="text-link" type="button" onClick={() => selectTab("history")}>Detailed history</button>
           {loading ? (
             <p className="lede" role="status">
               Loading records…
@@ -698,13 +702,7 @@ export function PatientChart() {
           {activity.filter(entry => entry.action !== "summary_amendment_started").length > 5 && <button className="secondary" type="button" onClick={() => setOlderActivity(value => !value)}>{olderActivity ? "Show fewer changes" : "Show older changes"}</button>}
         </section>
       )}
-      <button
-        className="text-link patient-history-link"
-        type="button"
-        onClick={() => selectTab(tab === "activity" ? "records" : "activity")}
-      >
-        {tab === "activity" ? "Back to my reports" : "See recent changes"}
-      </button>
+
     </main>
   );
 }

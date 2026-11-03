@@ -114,8 +114,10 @@ with db.session() as session:
             published_at=now,
             amends_id="ui-old",
             transcript="Fictional reviewed note",
-            summary_en=("Follow-up: symptoms improved. No fever reported. "
-                        "Repeat the advised test before the next review."),
+            summary_en=(
+                "Follow-up: symptoms improved. No fever reported. "
+                "Repeat the advised test before the next review."
+            ),
             summary_bn="ফলো-আপ: উপসর্গ কমেছে। জ্বর নেই। পরবর্তী পর্যালোচনার আগে পরামর্শকৃত পরীক্ষাটি করুন।",
         )
     )
@@ -153,6 +155,8 @@ async def fixture_lifespan(app):
             notes = json.loads(kwargs["parts"][0].text)
             return SimpleNamespace(
                 value=DigestResult(
+                    narrative_en=" ".join(n["english"] for n in notes),
+                    narrative_bn=" ".join(n["bangla"] for n in notes),
                     items=[
                         DigestItem(
                             category="assessment",
@@ -161,7 +165,7 @@ async def fixture_lifespan(app):
                             source_ids=[n["id"]],
                         )
                         for n in notes
-                    ]
+                    ],
                 )
             )
 

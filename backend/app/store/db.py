@@ -96,6 +96,16 @@ class ChartDigest(SQLModel, table=True):
     updated_at: datetime
 
 
+class CurrentMedicine(SQLModel, table=True):
+    """Patient-reported current use, independent of historical prescriptions."""
+
+    id: str = Field(primary_key=True)
+    patient_id: str = Field(index=True, foreign_key="authuser.id")
+    name: str
+    instructions: str = ""
+    confirmed_at: datetime
+
+
 class SpendRow(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     day: str
