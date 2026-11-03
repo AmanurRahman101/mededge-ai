@@ -47,6 +47,16 @@ test("doctor workspace: modular desktop/mobile, both themes, source and editable
       .locator(".workspace-grid")
       .evaluate((el) => el.getBoundingClientRect().width),
   ).toBeLessThanOrEqual(1200);
+  await expect(page.locator(".current-medicines .empty-inline")).toBeVisible();
+  await page.route("**/api/chart/patients/ui-patient/medicines", route => route.fulfill({
+    json: { medicines: [{id:"fictional", name:"Newly reported fictional medicine", instructions:"As prescribed", confirmed_at:"2026-11-04T00:00:00Z"}] }
+  }));
+  await page.locator(".patient-overview > .module-heading").getByRole("button", {name:"Refresh", exact:true}).click();
+  await expect(page.locator(".current-medicine-list")).toContainText("Newly reported fictional medicine");
+  await expect(page.locator(".current-medicine-list")).toContainText("Reported by patient");
+  await page.unroute("**/api/chart/patients/ui-patient/medicines");
+  await page.locator(".patient-overview > .module-heading").getByRole("button", {name:"Refresh", exact:true}).click();
+  await expect(page.locator(".current-medicines .empty-inline")).toBeVisible();
   await mkdir("../scripts/out/ui", { recursive: true });
   for (const theme of ["dark", "light"]) {
     await page.evaluate(

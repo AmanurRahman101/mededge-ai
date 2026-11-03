@@ -4,7 +4,7 @@ import { PixelPill } from "./PixelIcons";
 
 type Medicine = { id: string; name: string; instructions: string; confirmed_at: string };
 
-export function CurrentMedicines({ patientId, editable }: { patientId: string; editable: boolean }) {
+export function CurrentMedicines({ patientId, editable, refreshKey = 0 }: { patientId: string; editable: boolean; refreshKey?: number }) {
   const [medicines, setMedicines] = useState<Medicine[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -23,7 +23,7 @@ export function CurrentMedicines({ patientId, editable }: { patientId: string; e
       if (active) setMedicines(result.medicines);
     }).catch(e => { if (active) setError(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [path, reload]);
+  }, [path, reload, refreshKey]);
   function closeForm() { setAdding(false); addButton.current?.focus(); }
   return <section className="current-medicines" aria-label="Current medicines">
     <div className="module-heading">

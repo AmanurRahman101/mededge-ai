@@ -331,7 +331,7 @@ export function ChartOverview({
               </p>
             )}
           </section>}
-          {role === "doctor" && <CurrentMedicines key={patientId} patientId={patientId} editable={false} />}
+          {role === "doctor" && <CurrentMedicines key={patientId} patientId={patientId} editable={false} refreshKey={sequence.current} />}
           <details className="overview-clinical">
             <summary>
               Read your doctor’s notes ({data.published_note_count})
