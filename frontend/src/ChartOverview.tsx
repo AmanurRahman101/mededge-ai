@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getChart, post } from "./api";
 import { navigate } from "./navigation";
 import {
-  PixelDocument,
   PixelPill,
   PixelFlask,
   PixelVisit,
@@ -303,32 +302,6 @@ export function ChartOverview({
             <summary>
               Read published source notes ({data.published_note_count})
             </summary>
-            <div className="module-heading">
-              <h3>
-                <PixelVisit size={22} /> Assessment & care history
-              </h3>
-              <div className="segmented" aria-label="Note language">
-                <button
-                  type="button"
-                  aria-pressed={language === "en"}
-                  onClick={() => setLanguage("en")}
-                >
-                  English
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={language === "bn"}
-                  onClick={() => setLanguage("bn")}
-                >
-                  বাংলা
-                </button>
-              </div>
-            </div>
-            <p className="module-help">
-              Doctor-published notes, including diagnoses and assessments
-              documented there. The latest published version of each note is
-              shown.
-            </p>
             {data.published_note_count === 0 ? (
               <p className="empty-inline">
                 No doctor-published assessment yet. Unreviewed readings are
@@ -420,9 +393,6 @@ export function ChartOverview({
           </details>
           <details className="overview-history">
             <summary>Browse source reports ({data.record_count})</summary>
-            <h3>
-              <PixelDocument size={22} /> Reports at a glance
-            </h3>
             {data.records.length ? (
               data.records.map((entry) => (
                 <div className="overview-report" key={entry.run_id}>

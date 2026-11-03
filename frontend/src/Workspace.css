@@ -886,3 +886,44 @@ html.dark {
 .doctor-workspace .patient-preview { font-size: 13px; line-height: 1.5; color: var(--muted); overflow-wrap: anywhere; }
 .doctor-workspace .patient-open-label { font-size: 13px; color: var(--accent); font-weight: 600; margin-top: 6px; }
 .chart-back { margin-bottom: 20px; }
+
+/* A compact working chart keeps related information together. */
+.doctor-workspace, .record-workspace, .patient-workspace { margin-top: 20px; }
+.workspace-heading { margin-bottom: 18px; }
+.selected-patient { margin-bottom: 8px; }
+.chart-back, .record-workspace .back-link { margin-bottom: 12px; }
+.module-tabs { margin-bottom: 16px; }
+.module-tabs button { min-height: 42px; padding-block: 9px; }
+.module-heading { margin-bottom: 12px; align-items: center; }
+.patient-overview > .module-heading { margin-bottom: 4px; }
+.patient-overview > .module-heading p { display: none; }
+.patient-overview > .overview-caption { margin: 0 0 12px; }
+.verified-digest { margin: 0 0 12px; padding: 18px 20px; }
+.verified-digest .module-heading { margin-bottom: 12px; }
+.verified-digest .module-heading p { margin-top: 3px; }
+.verified-digest .overview-caption { margin: 12px 0 0; }
+.digest-sections { gap: 16px 24px; }
+.digest-sections li { margin-top: 8px; }
+.digest-sections li p { line-height: 1.55; }
+.overview-clinical, .overview-provisional, .overview-history { margin: 0; border-bottom: 1px solid var(--line); }
+.overview-clinical > summary, .overview-provisional > summary, .overview-history > summary { padding: 12px 2px; font-size: 14px; font-weight: 600; }
+.overview-note { padding: 12px 0; }
+.overview-readings { margin: 0 0 12px; padding-top: 12px; gap: 20px; border-top: 0; }
+.overview-report, .history-record { padding: 11px 0; }
+.note-languages { margin: 14px 0; gap: 20px; }
+.published-note, .reading-module { padding: 18px; margin-top: 14px; }
+.source-module { gap: 20px; }
+.source-actions { padding: 16px; }
+.history-row { padding: 12px 10px; }
+.submission-module .submission-inputs { gap: 16px; }
+.submission-module .submission-inputs > section { padding: 16px; }
+.submission-module .submission-footer { margin-top: 16px; padding-top: 14px; }
+@media (max-width: 760px) {
+  .workspace-heading { margin-bottom: 16px; }
+  .verified-digest, .published-note, .reading-module { padding: 14px; }
+  .module-heading { gap: 10px; }
+  .overview-clinical > summary, .overview-provisional > summary, .overview-history > summary { padding-block: 11px; }
+}
+
+.doctor-workspace .chart-open .chart-workspace { max-width: 1200px; }
+.doctor-workspace:has(.chart-open) .workspace-heading > button { display: none; }
