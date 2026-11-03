@@ -88,7 +88,7 @@ export function AuthPage({ path }: { path: string }) {
       {done && path === "/check-email" && <p className="auth-status" role="status">If the account needs verification, a link has been sent.</p>}
       {(path === "/verify-email" || path === "/reset-password") && !token && <p className="auth-error" role="alert">This link is missing its token. Please request a new link.</p>}
       {path === "/verify-email" && <LinkButton to="/forgot-password">Forgot your password?</LinkButton>}
-      <button className="primary auth-submit" type="submit" disabled={busy || (path === "/check-email" && cooldown > 0) || (["/verify-email", "/reset-password"].includes(path) && !token)}>{busy ? "Please wait…" : path === "/check-email" && cooldown ? `Try again in ${cooldown}s` : action}<ArrowRight size={18} /></button>
+      <button className="primary auth-submit" type="submit" disabled={busy || cooldown > 0 || (["/verify-email", "/reset-password"].includes(path) && !token)}>{busy ? "Please wait…" : cooldown ? `Try again in ${cooldown}s` : action}<ArrowRight size={18} /></button>
     </form>}
     {path === "/signin" && <div className="auth-bottom"><span>New to MedEdge?</span><LinkButton to={`/signup?role=${role}`}>Create an account</LinkButton><LinkButton to="/check-email">Resend verification</LinkButton></div>}
     {path === "/signup" && !done && <div className="auth-bottom"><span>Already have an account?</span><LinkButton to={`/signin?role=${role}`}>Sign in</LinkButton></div>}
