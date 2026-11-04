@@ -166,7 +166,7 @@ export function App() {
                 {signingOut ? "Signing out…" : "Sign out"}
               </button>
             </>
-          ) : (
+          ) : !["/signin", "/signup", "/verify-email", "/forgot-password", "/reset-password", "/check-email"].includes(path) ? (
             <button
               className="top-link"
               onClick={() => navigate("/signin")}
@@ -174,7 +174,7 @@ export function App() {
             >
               Sign in
             </button>
-          )}
+          ) : null}
           <button
             className="icon-button"
             type="button"

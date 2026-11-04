@@ -33,3 +33,7 @@ The patient summary shows an explicitly patient-reported current-medicines list,
 The doctor's Add report & note section offers Report & note or New prescription. New prescriptions offer Dictate a prescription or Write manually. The prescription editor keeps identity/strength/form together, distinguishes morning/noon/night amounts from strength, and preserves custom schedules and duration. Unknown slots stay blank and an explicit zero remains zero. Each row has a confirmation checkbox and an optional spoken-evidence/registry disclosure. Publishing requires row review and review of English/Bangla assessment text. Patient names, author/date and a bilingual medication table appear in the printed prescription.
 
 Registry lookup searches only when the user selects Search or presses Enter. Selecting a reference never prescribes a dose or replaces treatment automatically. Patients can still type and edit current medicines manually; doctors can type, add, remove and edit prescription rows after dictation.
+
+## Entry pages
+
+Keep the landing page's two workspace choices and pixel illustrations. Each choice has a workspace title, one short description and one action. Authentication uses a centered 440px form with persistent labels and no promotional sidebar. Sign-up uses simple patient/doctor choices; the doctor credential disclosure remains visible when selected. Recovery, verification and fictional demo access remain available, with secondary sign-in options collapsed below the main form. Preserve the footer and both themes.

@@ -23,18 +23,10 @@ export function Start() {
           </span>
           <div className="choice-content">
             <PixelWorkspaceIcon workspace="patient" size={120} />
-            <span className="choice-label">Patient portal</span>
-            <h2>
-              Your records,
-              <br />
-              within reach.
-            </h2>
-            <p>
-              Photograph a report, check what’s hidden, and share it with a
-              doctor.
-            </p>
+            <h2>Patient portal</h2>
+            <p>Your reports and doctor’s notes, together.</p>
             <span className="choice-action">
-              Continue as a patient <ArrowRight size={18} />
+              Open patient portal <ArrowRight size={18} />
             </span>
           </div>
         </button>
@@ -49,32 +41,22 @@ export function Start() {
           </span>
           <div className="choice-content">
             <PixelWorkspaceIcon workspace="doctor" size={120} />
-            <span className="choice-label">Doctor workspace</span>
-            <h2>
-              A clearer view,
-              <br />
-              on every page.
-            </h2>
-            <p>
-              See your patient’s history, review reports, and publish a note.
-            </p>
+            <h2>Doctor workspace</h2>
+            <p>Review patient history. Write prescriptions.</p>
             <span className="choice-action">
-              Continue as a doctor <ArrowRight size={18} />
+              Open doctor workspace <ArrowRight size={18} />
             </span>
           </div>
         </button>
       </div>
       <div className="demo-strip">
-        <div>
-          <strong>See how it works.</strong>
-          <span>Explore a fictional example without an account.</span>
-        </div>
+        <span>Try a fictional example. No account needed.</span>
         <button
           className="text-link demo-link"
           type="button"
           onClick={() => navigate("/demo")}
         >
-          Explore the demo <ArrowRight size={17} />
+          View demo <ArrowRight size={17} />
         </button>
       </div>
     </main>

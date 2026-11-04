@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Eye, EyeSlash, FileText, LockKey, ShareNetwork } from "@phosphor-icons/react";
+import { ArrowLeft, ArrowRight, Eye, EyeSlash } from "@phosphor-icons/react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import { ApiError, changePassword, forgotPassword, getDemoAccounts, type DemoAccounts, login, logout, register, resendVerification, resetPassword, setCsrfToken, verifyEmail, type UserRole } from "./api";
@@ -20,7 +20,7 @@ function EmailField({ value, onChange }: { value: string; onChange: (value: stri
 }
 
 function AuthShell({ children }: { children: ReactNode }) {
-  return <main className="auth-layout"><aside className="auth-aside"><div className="auth-aside-main"><div className="auth-symbol" aria-hidden="true"><span></span><span></span><span></span><span></span></div><h2>Care in the details.<br /><span>Clarity in the record.</span></h2><p>Turn paper reports into structured records, with the source available for review.</p></div><div className="auth-principles"><div><FileText size={18} /><span>From page to record</span></div><div><LockKey size={18} /><span>Review before sharing</span></div><div><ShareNetwork size={18} /><span>Made for the handoff</span></div></div></aside><section className="auth-content">{children}</section></main>;
+  return <main className="auth-layout"><section className="auth-content">{children}</section></main>;
 }
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : "Something went wrong. Please try again.";
@@ -51,7 +51,7 @@ export function AuthPage({ path }: { path: string }) {
     setBusy(true);
     try {
       if (path === "/signin") { const user = await login(email, password, remember); setUser(user); const next = sessionStorage.getItem("mededge-next"); sessionStorage.removeItem("mededge-next"); navigate(next && (next === "/account" || next === `/${user.role}` || next.startsWith(`/${user.role}?`) || next.startsWith(`/${user.role}/`)) ? next : `/${user.role}`, true); }
-      else if (path === "/signup") { await register({ full_name: name.trim(), email, password, role }); setDone(true); }
+      else if (path === "/signup") { await register({ full_name: name.trim(), email, password, role }); setDone(true); setCooldown(60); }
       else if (path === "/verify-email") { await verifyEmail(token, password); setDone(true); setPassword(""); }
       else if (path === "/forgot-password") { await forgotPassword(email); setDone(true); }
       else if (path === "/reset-password") { await resetPassword(token, password); setDone(true); setPassword(""); setConfirm(""); }
@@ -64,36 +64,34 @@ export function AuthPage({ path }: { path: string }) {
     if (!email || cooldown || busy) return;
     setBusy(true); setError("");
     try { await resendVerification(email); setCooldown(60); setDone(true); }
-    catch (caught) { setError(errorText(caught)); }
+    catch (caught) { setError(errorText(caught)); if (caught instanceof ApiError && caught.retryAfter) setCooldown(caught.retryAfter); }
     finally { setBusy(false); }
   }
 
-  const title = path === "/signin" ? "Welcome back." : path === "/signup" ? "Create your account." : path === "/verify-email" ? "Confirm your email." : path === "/forgot-password" ? "Forgot your password?" : path === "/reset-password" ? "Choose a new password." : "Check your email.";
-  const description = path === "/signin" ? "Sign in to continue to your workspace." : path === "/signup" ? "A place for your records, ready when you need them." : path === "/verify-email" ? "Enter your account password to confirm this address and finish setting up your account." : path === "/forgot-password" ? "Enter your email and we’ll send you a reset link." : path === "/reset-password" ? "Choose a password you haven’t used here before." : "Request another verification link for your account.";
+  const title = done && ["/signup", "/forgot-password"].includes(path) ? "Check your email" : done && path === "/verify-email" ? "Email confirmed" : done && path === "/reset-password" ? "Password updated" : path === "/signin" ? "Sign in" : path === "/signup" ? "Create account" : path === "/verify-email" ? "Confirm your email" : path === "/forgot-password" ? "Reset your password" : path === "/reset-password" ? "Choose a new password" : "Resend verification email";
+  const description = path === "/signin" || path === "/signup" || done ? "" : path === "/verify-email" ? "Enter your password to confirm your email address." : path === "/forgot-password" ? "We’ll email you a reset link." : path === "/reset-password" ? "Choose a password you haven’t used here before." : "Enter your account’s email address.";
   const action = path === "/signin" ? "Sign in" : path === "/signup" ? "Create account" : path === "/verify-email" ? "Verify email" : path === "/forgot-password" ? "Send reset link" : path === "/reset-password" ? "Reset password" : "Send verification link";
 
-  return <AuthShell><div className="auth-form-wrap"><LinkButton to="/" className="back-link"><ArrowLeft size={16} /> Back to MedEdge</LinkButton><div className="auth-heading"><h1>{title}</h1><p>{description}</p></div>
-    {done && path === "/signup" ? <div className="auth-success" role="status"><h2>Check your email.</h2><p>If registration can be completed, a verification link has been sent to your address. The link is valid for 24 hours.</p><button type="button" className="secondary" disabled={busy || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Resend in ${cooldown}s` : "Resend verification email"}</button><LinkButton to="/signin">Return to sign in</LinkButton></div> :
-    done && path === "/verify-email" ? <div className="auth-success" role="status"><h2>Email confirmed.</h2><p>Your account is ready. Sign in to continue.</p><LinkButton className="primary auth-submit" to="/signin">Continue to sign in <ArrowRight size={18} /></LinkButton></div> :
-    done && path === "/forgot-password" ? <div className="auth-success" role="status"><h2>Check your inbox.</h2><p>If an account exists for that address, you’ll receive a password reset link.</p><LinkButton to="/signin">Return to sign in</LinkButton></div> :
-    done && path === "/reset-password" ? <div className="auth-success" role="status"><h2>Password updated.</h2><p>For your security, your other sessions have been signed out.</p><LinkButton className="primary auth-submit" to="/signin">Sign in <ArrowRight size={18} /></LinkButton></div> :
+  return <AuthShell><div className="auth-form-wrap">{!["/signin", "/signup"].includes(path) && <LinkButton to="/signin" className="back-link"><ArrowLeft size={16} /> Back to sign in</LinkButton>}<div className="auth-heading"><h1>{title}</h1>{description && <p>{description}</p>}</div>
+    {error && <p className="auth-error" role="alert">{error}</p>}
+    {done && path === "/signup" ? <div className="auth-success" role="status"><p>If registration can be completed, you’ll receive a verification link. It expires in 24 hours.</p><button type="button" className="secondary" disabled={busy || cooldown > 0} onClick={() => void resend()}>{cooldown ? `Resend in ${cooldown}s` : "Resend verification email"}</button><LinkButton to="/signin">Return to sign in</LinkButton></div> :
+    done && path === "/verify-email" ? <div className="auth-success" role="status"><p>Your account is ready.</p><LinkButton className="primary auth-submit" to="/signin">Continue to sign in <ArrowRight size={18} /></LinkButton></div> :
+    done && path === "/forgot-password" ? <div className="auth-success" role="status"><p>If an account exists for that email, you’ll receive a reset link.</p><LinkButton to="/signin">Return to sign in</LinkButton></div> :
+    done && path === "/reset-password" ? <div className="auth-success" role="status"><p>Your other sessions have been signed out.</p><LinkButton className="primary auth-submit" to="/signin">Sign in <ArrowRight size={18} /></LinkButton></div> :
     <form className="auth-form" onSubmit={(event) => void submit(event)}>
-      {path === "/signin" && demoAccounts?.enabled && <div className="demo-login" role="group" aria-label="Judge demo accounts"><span>Judging? Try the shared demo, fictional data only.</span><div><button type="button" className="text-link" onClick={() => { setEmail(demoAccounts.patient_email ?? ""); setPassword(demoAccounts.password ?? ""); }}>Use demo patient</button><button type="button" className="text-link" onClick={() => { setEmail(demoAccounts.doctor_email ?? ""); setPassword(demoAccounts.password ?? ""); }}>Use demo doctor</button></div></div>}
-      {path === "/signup" && <><div className="auth-field"><label htmlFor="full-name">Full name</label><input id="full-name" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" placeholder="Your full name" maxLength={100} required /></div><fieldset className="role-field"><legend>I’m joining as a</legend><div className="role-options"><label className={role === "patient" ? "selected" : ""}><input type="radio" name="role" value="patient" checked={role === "patient"} onChange={() => setRole("patient")} /><span>Patient<small>Manage and share records</small></span></label><label className={role === "doctor" ? "selected" : ""}><input type="radio" name="role" value="doctor" checked={role === "doctor"} onChange={() => setRole("doctor")} /><span>Doctor<small>Review and export records</small></span></label></div>{role === "doctor" && <small>Doctor accounts are self-declared; email verification does not verify credentials.</small>}</fieldset></>}
+      {path === "/signup" && <><fieldset className="role-field"><legend>Account type</legend><div className="role-options"><label className={role === "patient" ? "selected" : ""}><input type="radio" name="role" value="patient" checked={role === "patient"} onChange={() => setRole("patient")} /><span>Patient</span></label><label className={role === "doctor" ? "selected" : ""}><input type="radio" name="role" value="doctor" checked={role === "doctor"} onChange={() => setRole("doctor")} /><span>Doctor</span></label></div>{role === "doctor" && <small>Doctor credentials are self-declared, not professionally verified.</small>}</fieldset><div className="auth-field"><label htmlFor="full-name">Full name</label><input id="full-name" value={name} onChange={(event) => setName(event.target.value)} autoComplete="name" placeholder="Your full name" maxLength={100} required /></div></>}
       {["/signin", "/signup", "/forgot-password", "/check-email"].includes(path) && <EmailField value={email} onChange={setEmail} />}
       {["/signin", "/signup", "/reset-password", "/verify-email"].includes(path) && <PasswordField label={path === "/reset-password" ? "New password" : "Password"} value={password} onChange={setPassword} autoComplete={path === "/signin" || path === "/verify-email" ? "current-password" : "new-password"} hint={path === "/signup" || path === "/reset-password" ? "At least 12 characters. Spaces are welcome." : undefined} />}
       {["/signup", "/reset-password"].includes(path) && <PasswordField label="Confirm password" value={confirm} onChange={setConfirm} autoComplete="new-password" />}
       {path === "/signin" && <div className="auth-form-between"><label className="check"><input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />Remember me</label><LinkButton to="/forgot-password">Forgot password?</LinkButton></div>}
-      {error && <p className="auth-error" role="alert">{error}</p>}
       {done && path === "/check-email" && <p className="auth-status" role="status">If the account needs verification, a link has been sent.</p>}
       {(path === "/verify-email" || path === "/reset-password") && !token && <p className="auth-error" role="alert">This link is missing its token. Please request a new link.</p>}
       {path === "/verify-email" && <LinkButton to="/forgot-password">Forgot your password?</LinkButton>}
       <button className="primary auth-submit" type="submit" disabled={busy || cooldown > 0 || (["/verify-email", "/reset-password"].includes(path) && !token)}>{busy ? "Please wait…" : cooldown ? `Try again in ${cooldown}s` : action}<ArrowRight size={18} /></button>
     </form>}
-    {path === "/signin" && <div className="auth-bottom"><span>New to MedEdge?</span><LinkButton to={`/signup?role=${role}`}>Create an account</LinkButton><LinkButton to="/check-email">Resend verification</LinkButton></div>}
+    {path === "/signin" && <><div className="auth-bottom"><span>New here?</span><LinkButton to={`/signup?role=${role}`}>Create an account</LinkButton></div><div className="auth-options"><details><summary>Trouble signing in?</summary><LinkButton to="/check-email">Resend verification email</LinkButton></details>{demoAccounts?.enabled && <details><summary>Try a demo account</summary><p>Fictional records only.</p><div className="demo-login" role="group" aria-label="Demo accounts"><button type="button" className="secondary" onClick={() => { setEmail(demoAccounts.patient_email ?? ""); setPassword(demoAccounts.password ?? ""); }}>Use demo patient</button><button type="button" className="secondary" onClick={() => { setEmail(demoAccounts.doctor_email ?? ""); setPassword(demoAccounts.password ?? ""); }}>Use demo doctor</button></div></details>}</div></>}
     {path === "/signup" && !done && <div className="auth-bottom"><span>Already have an account?</span><LinkButton to={`/signin?role=${role}`}>Sign in</LinkButton></div>}
     {(["/verify-email", "/reset-password"].includes(path) && !token) && <div className="auth-bottom"><LinkButton to={path === "/verify-email" ? "/check-email" : "/forgot-password"}>Request a new link</LinkButton></div>}
-    {(path === "/forgot-password" || path === "/check-email") && !done && <div className="auth-bottom"><LinkButton to="/signin">Back to sign in</LinkButton></div>}
   </div></AuthShell>;
 }
 

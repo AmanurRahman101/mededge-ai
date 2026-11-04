@@ -111,13 +111,25 @@ test("patient and doctor primary screens pass automated accessibility checks in 
 
 test.describe("microphone privacy",()=>{
   test("pausing a changed account stops capture and retains the recording in memory",async({page,context})=>{
+    await page.addInitScript(()=>{
+      const state=window as Window & {auditCapturedSamples?:number};
+      state.auditCapturedSamples=0;
+      const NativeAudioNode=window.AudioWorkletNode;
+      window.AudioWorkletNode=class extends NativeAudioNode {
+        constructor(context:BaseAudioContext,name:string,options?:AudioWorkletNodeOptions) {
+          super(context,name,options);
+          this.port.addEventListener("message",event=>{state.auditCapturedSamples!+=event.data.length;});
+          this.port.start();
+        }
+      };
+    });
     await doctor(page,context);
     await page.getByRole("button",{name:"Add report & note",exact:true}).click();
     await page.getByRole("button",{name:"New prescription",exact:true}).click();
     await page.getByRole("button",{name:"Start recording",exact:true}).click();
     await expect(page.getByRole("button",{name:"Stop recording",exact:true})).toBeVisible();
-    // Capture a short fictional sample before changing accounts.
-    await page.waitForTimeout(350);
+    // Wait for actual sample delivery, rather than microphone startup timing.
+    await expect.poll(()=>page.evaluate(()=>(window as Window & {auditCapturedSamples?:number}).auditCapturedSamples||0)).toBeGreaterThan(2400);
     await context.addCookies([{name:"mededge_session",value:"ui-patient",url:"http://127.0.0.1:8023"}]);
     await page.evaluate(()=>window.dispatchEvent(new Event("focus")));
     await expect(page.getByRole("heading",{name:"Account changed",exact:true})).toBeVisible();
