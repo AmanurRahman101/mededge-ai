@@ -1,6 +1,7 @@
+import { PublicationChecks } from "./PublicationChecks";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { apiBase, createPrescription, getChart, getRun, getSampleDictation, post } from "./api";
-import { navigate, registerNavigationGuard } from "./navigation";
+import { navigate, registerNavigationGuard, recordReturnUrl } from "./navigation";
 import { useRecorder } from "./useRecorder";
 import { PrescriptionEditor, PrescriptionTable } from "./PrescriptionTable";
 import type { ClinicalSummary, Run } from "./types";
@@ -79,12 +80,23 @@ export function PrescriptionWorkspace({ run: initial }: { run: Run }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [reviewed, setReviewed] = useState(false);
+  const [summariesLoading, setSummariesLoading] = useState(true);
+  const [summariesError, setSummariesError] = useState("");
+  const loadSequence = useRef(0);
   useEffect(() => setRun(initial), [initial]);
   async function load() {
-    const result = await getChart<{ summaries: ClinicalSummary[] }>(`/records/${run.run_id}/summaries`);
-    setSummaries(result.summaries);
-    const next = result.summaries.find(s => s.status === "draft") || null;
-    saved.current = snapshot(next); setDraft(next); setReviewed(false);
+    const sequence = ++loadSequence.current;
+    setSummariesLoading(true); setSummariesError("");
+    try {
+      const result = await getChart<{ summaries: ClinicalSummary[] }>(`/records/${run.run_id}/summaries`);
+      if (sequence !== loadSequence.current) return;
+      setSummaries(result.summaries);
+      const next = result.summaries.find(s => s.status === "draft") || null;
+      saved.current = snapshot(next); setDraft(next); setReviewed(false);
+    } catch (error) {
+      if (sequence === loadSequence.current) setSummariesError(error instanceof Error ? error.message : "Could not load the saved prescription.");
+      throw error;
+    } finally { if (sequence === loadSequence.current) setSummariesLoading(false); }
   }
   useEffect(() => {
     if (["reviewing", "approved", "exported"].includes(run.status)) void load().catch(e => setError(e.message));
@@ -112,8 +124,17 @@ export function PrescriptionWorkspace({ run: initial }: { run: Run }) {
   }
   const published = summaries.filter(s => s.status === "published" && !summaries.some(n => n.status === "published" && n.amends_id === s.id));
   const ready = ["reviewing", "approved", "exported"].includes(run.status);
+  const unchecked = draft?.prescription?.filter(m => !m.confirmed || !m.name.trim()) || [];
+  const remaining = draft ? [
+    ...(!draft.prescription?.length ? [{ text: "Add at least one medicine", target: "prescription-medicines" }] : []),
+    ...unchecked.map(m => ({ text: `${m.name.trim() || "Unnamed medicine"}: check name, strength and instructions`, target: `medicine-${m.id}` })),
+    ...(!draft.transcript.trim() ? [{ text: "Enter the doctor’s note", target: "prescription-transcript" }] : []),
+    ...(!draft.summary_en.trim() ? [{ text: "Add the English assessment", target: "assessment-en" }] : []),
+    ...(!draft.summary_bn.trim() ? [{ text: "Add the Bangla assessment", target: "assessment-bn" }] : []),
+    ...(!reviewed ? [{ text: "Review both languages and complete the final check", target: "prescription-reviewed" }] : []),
+  ] : [];
   return <main className="workspace prescription-workspace">
-    <button className="back-link" type="button" onClick={() => navigate("/doctor")}>Back to patients</button>
+    <button className="back-link" type="button" onClick={() => navigate(recordReturnUrl(run.patient_id))}>Back to patient chart</button>
     <div className="module-heading"><h1>Prescription</h1><button className="secondary" type="button" disabled={busy} onClick={async () => {
       if (dirty && !window.confirm("Reload and discard unsaved changes?")) return;
       try { setRun(await getRun(run.run_id)); await load(); } catch(e) { setError(e instanceof Error ? e.message : "Could not refresh."); }
@@ -130,20 +151,23 @@ export function PrescriptionWorkspace({ run: initial }: { run: Run }) {
       }}>Retry processing</button>}
     </section>}
     {run.audio_available && <section className="prescription-audio"><h2>Original dictation</h2><audio controls preload="metadata" aria-label="Original prescription dictation" src={`${apiBase}/api/runs/${run.run_id}/files/audio`} /></section>}
+    {ready && summariesLoading && <p role="status">Loading the saved prescription…</p>}
+    {ready && summariesError && <div className="banner pii" role="alert"><p>{summariesError}</p><button type="button" className="secondary" onClick={() => void load().catch(() => {})}>Try loading again</button></div>}
     {draft && <fieldset className="prescription-draft-fields" aria-label="Prescription draft" disabled={busy}>
-      <details className="dictation-transcript"><summary>{run.input_mode === "voice_prescription" ? "Read or correct the transcript" : "Doctor’s additional note"}</summary><label>Doctor’s words<textarea value={draft.transcript} maxLength={20000} onChange={e => { setDraft({ ...draft, transcript: e.target.value, prescription: draft.prescription?.map(m => ({ ...m, confirmed: false })) }); setReviewed(false); }} /></label><p className="module-help">Changing this text does not rerun the AI. Update the medicine rows below to match your corrections.</p></details>
+      <details className="dictation-transcript"><summary>{run.input_mode === "voice_prescription" ? "Read or correct the transcript" : "Doctor’s additional note"}</summary><label>Doctor’s words<textarea id="prescription-transcript" value={draft.transcript} maxLength={20000} onChange={e => { setDraft({ ...draft, transcript: e.target.value, prescription: draft.prescription?.map(m => ({ ...m, confirmed: false })) }); setReviewed(false); }} /></label><p className="module-help">Changing this text does not rerun the AI. Update the medicine rows below to match your corrections.</p></details>
       {draft.unresolved && draft.unresolved !== "[]" && <details className="review-issues"><summary>Check unclear details from dictation</summary><p>{typeof draft.unresolved === "string" ? (() => { try { return JSON.parse(draft.unresolved).join("\n"); } catch { return draft.unresolved; } })() : draft.unresolved.join("\n")}</p></details>}
       <PrescriptionEditor medicines={draft.prescription || []} onChange={rows => { setDraft({ ...draft, prescription: rows }); setReviewed(false); }} />
       <section className="prescription-assessment"><h2>Assessment and follow-up</h2><div className="bilingual-editor">
-        <label>English<textarea value={draft.summary_en} maxLength={12000} onChange={e => { setDraft({ ...draft, summary_en: e.target.value }); setReviewed(false); }} /></label>
-        <label>বাংলা<textarea lang="bn" value={draft.summary_bn} maxLength={12000} onChange={e => { setDraft({ ...draft, summary_bn: e.target.value }); setReviewed(false); }} /></label>
+        <label>English<textarea id="assessment-en" value={draft.summary_en} maxLength={12000} onChange={e => { setDraft({ ...draft, summary_en: e.target.value }); setReviewed(false); }} /></label>
+        <label>বাংলা<textarea id="assessment-bn" lang="bn" value={draft.summary_bn} maxLength={12000} onChange={e => { setDraft({ ...draft, summary_bn: e.target.value }); setReviewed(false); }} /></label>
       </div></section>
-      <div className="publish-bar"><label className="check"><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} />I checked every medicine, both language versions and any unclear details.</label>
+      <PublicationChecks items={remaining} />
+      <div className="publish-bar prescription-publish-bar"><p className="draft-status" role="status">{busy ? "Saving…" : dirty ? "Unsaved changes" : "Saved"}</p><label className="check"><input id="prescription-reviewed" type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} />I checked every medicine, both language versions and any unclear details.</label>
         <div className="action-group"><button className="secondary" type="button" disabled={busy || !dirty} onClick={() => void save(false)}>Save draft</button>
           <button className="primary" type="button" disabled={busy || !reviewed || !draft.prescription?.length || draft.prescription.some(m => !m.confirmed || !m.name.trim()) || !draft.summary_en.trim() || !draft.summary_bn.trim() || !draft.transcript.trim()} onClick={() => void save(true)}>{busy ? "Saving…" : "Verify and publish prescription"}</button></div>
       </div>
     </fieldset>}
-    {ready && !draft && !published.length && <p className="empty-inline">The author has not published this prescription yet.</p>}
+    {ready && !summariesLoading && !summariesError && !draft && !published.length && <p className="empty-inline">The author has not published this prescription yet.</p>}
     {published.map(note => <article className="published-note" key={note.id}>
       <h2>Published prescription</h2><p>Patient: {run.patient_name || run.pseudonym}</p><p>{note.author_name} · {note.published_at && new Date(note.published_at).toLocaleString()}</p>
       <PrescriptionTable medicines={note.prescription || []} />

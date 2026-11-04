@@ -43,6 +43,14 @@ CONSENT_TEXT = (
     "Images and voice may be sent to Meta for processing. Downloaded information "
     "cannot be recalled. Doctor accounts are self-declared, not credential-verified."
 )
+CONSENT_TEXT_BN = (
+    "আমি এই ডাক্তারকে আমার সম্পূর্ণ স্বাস্থ্য ইতিহাস ও ভবিষ্যতের সব রেকর্ড দেখার এবং "
+    "নতুন রিপোর্ট যোগ, যাচাই, অনুমোদন ও ডাউনলোড করার অনুমতি দিচ্ছি। "
+    "আমি অনুমতি বন্ধ না করা পর্যন্ত এটি কার্যকর থাকবে। "
+    "মুছে না ফেলা পর্যন্ত আসল রিপোর্ট ও কণ্ঠের রেকর্ডিং আমার স্বাস্থ্য তথ্যে রাখা হবে। "
+    "ছবি ও কণ্ঠের রেকর্ডিং প্রক্রিয়াকরণের জন্য Meta-তে পাঠানো হতে পারে। ডাউনলোড করা তথ্য ফেরত নেওয়া যায় না। "
+    "ডাক্তার অ্যাকাউন্টের পরিচয় নিজে দেওয়া; পেশাগত যোগ্যতা যাচাই করা হয়নি।"
+)
 
 
 def active_connection(db, patient_id: str, doctor_id: str) -> bool:
@@ -250,7 +258,12 @@ def connections(request: Request):
                     "decided_at": row.decided_at.isoformat() if row.decided_at else None,
                 }
             )
-    return {"connections": result, "consent_version": CONSENT_VERSION, "consent_text": CONSENT_TEXT}
+    return {
+        "connections": result,
+        "consent_version": CONSENT_VERSION,
+        "consent_text": CONSENT_TEXT,
+        "consent_text_bn": CONSENT_TEXT_BN,
+    }
 
 
 @router.post("/requests/{request_id}/cancel")

@@ -1,3 +1,4 @@
+import { usePatientLanguage } from "./patientLanguage";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChart, post } from "./api";
 import { PrescriptionTable } from "./PrescriptionTable";
@@ -72,12 +73,14 @@ export function ChartOverview({
   role: "doctor" | "patient";
   detailsOnly?: boolean;
 }) {
+  const { t, message, locale, language: patientLanguage } = usePatientLanguage();
   const [data, setData] = useState<Snapshot | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [digest, setDigest] = useState<Digest | null>(null);
   const [digestLoading, setDigestLoading] = useState(false);
-  const [language, setLanguage] = useState<"en" | "bn">("en");
+  const [doctorLanguage, setLanguage] = useState<"en" | "bn">("en");
+  const language = role === "patient" ? patientLanguage : doctorLanguage;
   const sequence = useRef(0);
   const refresh = useCallback(
     async (retry = false) => {
@@ -151,27 +154,24 @@ export function ChartOverview({
       type="button"
       onClick={() => navigate(`/${role}/records/${entry.run_id}`)}
     >
-      {entry.title} · {new Date(entry.created_at).toLocaleDateString()}
+      {entry.title} · {new Date(entry.created_at).toLocaleDateString(locale)}
     </button>
   );
   if (role === "patient" && !detailsOnly) return (
     <section className="patient-overview patient-summary" aria-label="Patient summary">
       <div className="module-heading">
-        <h2>Your health summary</h2>
-        <div className="segmented" aria-label="Summary language">
-          <button type="button" aria-pressed={language === "en"} onClick={() => setLanguage("en")}>English</button>
-          <button type="button" aria-pressed={language === "bn"} onClick={() => setLanguage("bn")}>বাংলা</button>
-        </div>
+        <h2>{t("Your health summary")}</h2>
+
       </div>
-      {error && <p className="banner pii" role="alert">{error}</p>}
-      {(loading || digestLoading) && <p role="status">Updating your summary…</p>}
+      {error && <p className="banner pii" role="alert">{message(error)}</p>}
+      {(loading || digestLoading) && <p role="status">{t("Updating your summary…")}</p>}
       {digest?.status === "ready" && <p className="health-narrative" lang={language}>{language === "en" ? digest.narrative_en : digest.narrative_bn}</p>}
-      {!loading && data && !data.published_note_count && <p className="empty-inline">Your health summary will appear after your doctor reviews and publishes a note.</p>}
-      {digest && digest.status !== "ready" && <p role="status">Your summary is unavailable right now. You can still read your notes in detailed history.</p>}
-      {digest?.status === "failed" && <button className="secondary" type="button" disabled={digestLoading} onClick={() => void refresh(true)}>Try summary again</button>}
-      {error && <button className="secondary" type="button" onClick={() => void refresh()}>Try again</button>}
+      {!loading && data && !data.published_note_count && <p className="empty-inline">{t("Your health summary will appear after your doctor reviews and publishes a note.")}</p>}
+      {digest && digest.status !== "ready" && <p role="status">{t("Your summary is unavailable right now. You can still read your notes in detailed history.")}</p>}
+      {digest?.status === "failed" && <button className="secondary" type="button" disabled={digestLoading} onClick={() => void refresh(true)}>{t("Try summary again")}</button>}
+      {error && <button className="secondary" type="button" onClick={() => void refresh()}>{t("Try again")}</button>}
       <CurrentMedicines key={patientId} patientId={patientId} editable />
-      <button className="secondary detailed-history-button" type="button" onClick={() => navigate("/patient?tab=history")}>Detailed history</button>
+      <button className="secondary detailed-history-button" type="button" onClick={() => navigate("/patient?tab=history")}>{t("Detailed history")}</button>
     </section>
   );
   return (
@@ -181,10 +181,7 @@ export function ChartOverview({
           <h2>
             {detailsOnly ? "Detailed history" : "Patient summary"}
           </h2>
-          <p>
-            All saved history, including archived reports. Updated from the
-            latest saved entries.
-          </p>
+          <p>{t("All saved history, including archived reports. Updated from the latest saved entries.")}</p>
         </div>
         <button
           className="secondary"
@@ -197,15 +194,15 @@ export function ChartOverview({
       </div>
       {error && (
         <p className="banner pii" role="alert">
-          {error}
+          {message(error)}
         </p>
       )}
-      {loading && !data && <p role="status">Loading the full history…</p>}
-      {detailsOnly && <button className="text-link" type="button" onClick={() => navigate("/patient?tab=summary")}>Back to my summary</button>}
+      {loading && !data && <p role="status">{t("Loading the full history…")}</p>}
+      {detailsOnly && <button className="text-link" type="button" onClick={() => navigate("/patient?tab=summary")}>{t("Back to my summary")}</button>}
       {data && (
         <>
-          <p className="overview-caption">
-            {data.record_count} {data.record_count === 1 ? "report" : "reports"}{" "}
+          <p className="overview-caption" hidden={detailsOnly}>
+            {data.record_count} {role === "patient" ? t("Your reports") : data.record_count === 1 ? "report" : "reports"}{" "}
             · {data.published_note_count} published{" "}
             {data.published_note_count === 1 ? "note" : "notes"}. This covers
             records saved in MedEdge.
@@ -337,13 +334,10 @@ export function ChartOverview({
           {role === "doctor" && <CurrentMedicines key={patientId} patientId={patientId} editable={false} refreshKey={sequence.current} />}
           <details className="overview-clinical">
             <summary>
-              Read your doctor’s notes ({data.published_note_count})
+              {t("Read your doctor’s notes")} ({data.published_note_count})
             </summary>
             {data.published_note_count === 0 ? (
-              <p className="empty-inline">
-                No doctor-published assessment yet. Unreviewed readings are
-                listed below.
-              </p>
+              <p className="empty-inline">{t("No doctor-published assessment yet. Unreviewed readings are listed below.")}</p>
             ) : (
               data.records.flatMap((entry) =>
                 entry.notes.map((note) => (
@@ -352,7 +346,7 @@ export function ChartOverview({
                       <strong>{note.author_name}</strong>
                       <span>
                         {note.published_at
-                          ? new Date(note.published_at).toLocaleDateString()
+                          ? new Date(note.published_at).toLocaleDateString(locale)
                           : "Published"}
                       </span>
                       {source(entry)}
@@ -367,16 +361,12 @@ export function ChartOverview({
             )}
           </details>
           <details className="overview-provisional">
-            <summary>Report readings — not checked by a doctor</summary>
+            <summary>{t("Report readings — not checked by a doctor")}</summary>
             <div className="overview-readings">
               <section>
                 <h3>
-                  <PixelPill size={22} /> Medicines mentioned
-                </h3>
-                <p className="module-help">
-                  As extracted from dated reports; these may be inaccurate or no
-                  longer current.
-                </p>
+                  <PixelPill size={22} />{t("Medicines mentioned")}</h3>
+                <p className="module-help">{t("As extracted from dated reports; these may be inaccurate or no longer current.")}</p>
                 {data.records.some((r) => r.medications.length) ? (
                   data.records
                     .filter((r) => r.medications.length)
@@ -391,16 +381,13 @@ export function ChartOverview({
                       </div>
                     ))
                 ) : (
-                  <p className="empty-inline">No medicines extracted.</p>
+                  <p className="empty-inline">{t("No medicines extracted.")}</p>
                 )}
               </section>
               <section>
                 <h3>
-                  <PixelFlask size={22} /> Tests & results
-                </h3>
-                <p className="module-help">
-                  Provisional readings and tests advised in saved reports.
-                </p>
+                  <PixelFlask size={22} />{t("Tests & results")}</h3>
+                <p className="module-help">{t("Provisional readings and tests advised in saved reports.")}</p>
                 {data.records.some(
                   (r) => r.tests.length || r.results.length,
                 ) ? (
@@ -410,8 +397,8 @@ export function ChartOverview({
                       <div className="overview-reading" key={entry.run_id}>
                         {source(entry)}
                         <ul>
-                          {entry.tests.map((t, i) => (
-                            <li key={`t${i}`}>{t} · Advised</li>
+                          {entry.tests.map((test, i) => (
+                            <li key={`t${i}`}>{test} · {t("Advised")}</li>
                           ))}
                           {entry.results.map((r, i) => (
                             <li key={`r${i}`}>
@@ -424,25 +411,25 @@ export function ChartOverview({
                       </div>
                     ))
                 ) : (
-                  <p className="empty-inline">No tests or results extracted.</p>
+                  <p className="empty-inline">{t("No tests or results extracted.")}</p>
                 )}
               </section>
             </div>
           </details>
           <details className="overview-history">
-            <summary>Open your reports ({data.record_count})</summary>
+            <summary>{t("Open your reports")} ({data.record_count})</summary>
             {data.records.length ? (
               data.records.map((entry) => (
                 <div className="overview-report" key={entry.run_id}>
                   {source(entry)}
                   <span className="status-label">
-                    {recordStatus(entry.status)}
-                    {entry.archived ? " · Archived" : ""}
+                    {message(recordStatus(entry.status))}
+                    {entry.archived ? ` · ${t("Archived")}` : ""}
                   </span>
                 </div>
               ))
             ) : (
-              <p className="empty-inline">No reports have been saved yet.</p>
+              <p className="empty-inline">{t("No reports have been saved yet.")}</p>
             )}
           </details>
         </>

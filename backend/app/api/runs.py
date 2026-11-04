@@ -250,6 +250,7 @@ async def create_run(
 async def get_run(run_id: str, request: Request) -> dict:
     row = _row_or_404(request, run_id)
     result = _public(row)
+    result["patient_id"] = row.owner_id
     result["source_available"] = (_db(request).runs_dir / run_id / "redacted.png").is_file()
     result["original_available"] = False
     result["audio_available"] = False

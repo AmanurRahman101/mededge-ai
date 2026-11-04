@@ -613,7 +613,11 @@ html.dark {
 .upload-module > svg {
   margin-bottom: 18px;
 }
+.file-picker-button { justify-self: start; cursor: pointer; }
+.upload-picker:focus-within .file-picker-button { outline: 2px solid var(--fg); outline-offset: 3px; }
+.upload-picker .file-input { position: absolute; width: 1px; height: 1px; padding: 0; margin: 0; border: 0; clip-path: inset(50%); }
 .upload-picker {
+  position: relative;
   display: grid;
   gap: 10px;
   font-weight: 500;
@@ -1314,10 +1318,39 @@ html.dark {
   .medicine-search-results li { align-items: flex-start; flex-wrap: wrap; }
   .prescription-medicine .module-heading { gap: 12px; flex-wrap: wrap; }
 }
+
+/* Patient language and focused review controls. */
+.record-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.record-navigation .patient-language, .record-navigation .back-link { margin: 0; }
+.patient-language { width: fit-content; margin: 0 0 16px; }
+.patient-language button { min-height: 44px; }
+.patient-search-tools { margin-bottom: 12px; }
+.active-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+.active-filters > span { border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; font-size: 14px; }
+.medicine-help > summary { min-height: 44px; padding-block: 10px; cursor: pointer; }
+.prescription-assessment .bilingual-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.prescription-assessment textarea { min-height: 140px; }
+.medicine-compact { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.medicine-compact > div { min-width: 0; overflow-wrap: anywhere; }
+.medicine-compact p { margin: 6px 0; }
+.review-progress, .draft-status { color: var(--muted); font-size: 14px; }
+.publication-checks { margin: 24px 0 16px; }
+.publication-checks h2 { font-size: 18px; }
+.publication-checks ul { padding-left: 20px; margin: 8px 0; }
+.publication-checks .text-link { text-align: start; min-height: 44px; }
+.prescription-publish-bar { flex-wrap: wrap; gap: 12px; }
+.prescription-publish-bar .draft-status { width: 100%; margin: 0; }
+.prescription-publish-bar .check { max-width: 65ch; }
+@media (max-width: 760px) {
+  .patient-workspace > .patient-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .patient-workspace > .patient-navigation button { min-width: 0; min-height: 64px; flex-direction: column; justify-content: center; gap: 5px; padding: 8px 4px; font-size: 14px; }
+  .prescription-assessment .bilingual-editor { grid-template-columns: minmax(0, 1fr); }
+}
+
 @media print {
   .prescription-audio, .prescription-editor, .prescription-assessment, .dictation-transcript,
   .review-issues, .prescription-workspace > .module-heading, .prescription-patient, .prescription-workspace .publish-bar,
-  .prescription-workspace .action-group, .prescription-workspace > .banner { display: none !important; }
+  .prescription-workspace .action-group, .prescription-workspace > .banner, .publication-checks, .patient-language { display: none !important; }
   .prescription-table { overflow: visible !important; }
   .prescription-table table {
     min-width: 0; width: 100%; table-layout: fixed; font-size: 9pt;

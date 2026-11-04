@@ -1,5 +1,6 @@
 import { MedicineLookup } from "./MedicineLookup";
 import type { PrescribedMedicine } from "./types";
+import { useState } from "react";
 
 export const blankMedicine = (): PrescribedMedicine => ({
   id: crypto.randomUUID(), name: "", strength: "", form: "", morning: "", noon: "", night: "",
@@ -19,14 +20,19 @@ export function PrescriptionTable({ medicines }: { medicines: PrescribedMedicine
 }
 
 export function PrescriptionEditor({ medicines, onChange }: { medicines: PrescribedMedicine[]; onChange: (rows: PrescribedMedicine[]) => void }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   function update(id: string, patch: Partial<PrescribedMedicine>) {
     onChange(medicines.map(row => row.id === id ? { ...row, ...patch, confirmed: patch.confirmed ?? false } : row));
   }
-  return <section className="prescription-editor" aria-label="Edit prescription medicines">
+  return <section id="prescription-medicines" className="prescription-editor" aria-label="Edit prescription medicines">
     <div className="module-heading"><h2>Prescription medicines</h2><button className="secondary" type="button" disabled={medicines.length >= 40} onClick={() => onChange([...medicines, blankMedicine()])}>Add medicine manually</button></div>
     <p className="module-help">Check each medicine and its instructions before publishing. Leave unstated details blank. An explicit 0 means no dose at that time.</p>
+    {!!medicines.length && <p className="review-progress" role="status">{medicines.filter(m => m.confirmed && m.name.trim()).length} of {medicines.length} checked</p>}
     {!medicines.length && <p className="empty-inline">No medicines entered yet. Add one manually to begin.</p>}
-    {medicines.map((m, index) => <article className="prescription-medicine" key={m.id} aria-label={`Medicine ${index + 1}`}>
+    {medicines.map((m, index) => m.confirmed && m.name.trim() && collapsed.has(m.id) ? <article id={`medicine-${m.id}`} className="prescription-medicine medicine-compact" key={m.id} aria-label={`Medicine ${index + 1}`}>
+      <div><h3>{m.name} {m.strength}</h3><p>{[m.form, [m.morning || "—", m.noon || "—", m.night || "—"].join(" / "), m.other_schedule, m.instructions, m.duration].filter(Boolean).join(" · ")}</p><small>Checked</small></div>
+      <button type="button" className="secondary" aria-label={`Edit medicine ${index + 1}`} onClick={() => setCollapsed(previous => { const next = new Set(previous); next.delete(m.id); return next; })}>Edit</button>
+    </article> : <article id={`medicine-${m.id}`} className="prescription-medicine" key={m.id} aria-label={`Medicine ${index + 1}`}>
       <div className="module-heading"><h3>Medicine {index + 1}</h3><button type="button" className="text-link" onClick={() => onChange(medicines.filter(row => row.id !== m.id))}>Remove medicine {index + 1}</button></div>
       <div className="prescription-fields">
         <label className="medicine-name">Medicine name<input value={m.name} maxLength={200} required onChange={e => update(m.id, { name: e.target.value })} /></label>
@@ -45,6 +51,7 @@ export function PrescriptionEditor({ medicines, onChange }: { medicines: Prescri
         <p className="module-help">Choosing a product changes its name and form only. Check the listed composition against the strength you prescribed.</p>
       </details>
       <label className="check"><input type="checkbox" checked={m.confirmed} disabled={!m.name.trim()} onChange={e => update(m.id, { confirmed: e.target.checked })} />I checked medicine {index + 1}, its strength, schedule and duration.</label>
+      {m.confirmed && m.name.trim() && <button type="button" className="text-link" onClick={() => { setCollapsed(previous => new Set(previous).add(m.id)); requestAnimationFrame(() => document.getElementById(`medicine-${m.id}`)?.querySelector<HTMLElement>("button")?.focus()); }}>Collapse checked medicine</button>}
     </article>)}
   </section>;
 }

@@ -1,3 +1,4 @@
+import { usePatientLanguage, PatientLanguageControl } from "./patientLanguage";
 import { useEffect, useState } from "react";
 import { apiBase, confirmRun, createRun, getChart, listCases } from "./api";
 import { useApp } from "./store";
@@ -19,6 +20,7 @@ export function Patient({
 }: {
   initialRunId?: string | null;
 }) {
+  const { t, message, locale, language } = usePatientLanguage();
   const patientName = useApp((state) => state.user?.full_name);
   const isDemo = useApp((state) => state.user?.id) === "demo-patient";
   const [runId, setRunId] = useState<string | null>(initialRunId);
@@ -78,7 +80,7 @@ export function Patient({
       setLocalError(
         caught instanceof Error
           ? caught.message
-          : "The upload failed. Please try again.",
+          : t("The upload failed. Please try again."),
       );
     } finally {
       setBusy(false);
@@ -96,7 +98,7 @@ export function Patient({
       setLocalError(
         caught instanceof Error
           ? caught.message
-          : "This image could not be prepared. Choose another photo.",
+          : t("This image could not be prepared. Choose another photo."),
       );
     } finally {
       setBusy(false);
@@ -125,24 +127,27 @@ export function Patient({
   );
   return (
     <main className="workspace record-workspace">
+      <div className="record-navigation">
       <button
         className="back-link"
         type="button"
         onClick={() => navigate("/patient")}
       >
-        ← My records
+        ← {t("My records")}
       </button>
+      <PatientLanguageControl />
+      </div>
       <header className="workspace-heading">
         <div className="workspace-title">
           <PixelWorkspaceIcon workspace="patient" size={40} />
           <div>
-            <h1>{runId ? "Your report" : "Add a report"}</h1>
+            <h1>{runId ? t("Your report") : t("Add a report")}</h1>
             <p>
               {run
                 ? published.length
-                  ? "Doctor note published"
-                  : recordStatus(run.status)
-                : "Upload a clear photo of your prescription or report."}
+                  ? t("Doctor note published")
+                  : message(recordStatus(run.status))
+                : t("Upload a clear photo of your prescription or report.")}
             </p>
           </div>
         </div>
@@ -151,47 +156,39 @@ export function Patient({
             className="secondary"
             type="button"
             onClick={() => window.location.reload()}
-          >
-            Refresh status
-          </button>
+          >{t("Refresh status")}</button>
         )}
       </header>
       {(localError || error) && (
         <p className="banner pii" role="alert">
-          {localError || error}
+          {message(localError || error)}
         </p>
       )}
       {summaryError && (
         <p className="banner pii" role="alert">
-          {summaryError}
+          {message(summaryError)}
         </p>
       )}
       {!runId && (
         <section className="upload-module">
           <PixelDocument size={42} />
-          <h2>Keep your report in one place</h2>
-          <p>
-            A sharp, well-lit photo gives the best reading. Include the whole
-            page.
-          </p>
-          <label className="upload-picker">
-            Report image
-            <input
+          <h2>{t("Keep your report in one place")}</h2>
+          <p>{t("A sharp, well-lit photo gives the best reading. Include the whole page.")}</p>
+          <label className="upload-picker">{t("Report image")}<input
+              className="file-input"
+              aria-label={t("Report image")}
               type="file"
               accept="image/*"
               disabled={busy}
               onChange={(e) => void onFile(e.target.files?.[0])}
             />
+            <span className="secondary file-picker-button">{t("Choose a photo")}</span>
           </label>
-          <p className="module-help">
-            Your image is stored until you delete the record. Meta prepares a
-            privacy preview first. You will review it before the redacted page
-            is read.
-          </p>
-          {busy && <p role="status">Preparing and uploading your report…</p>}
+          <p className="module-help">{t("Your image is stored until you delete the record. Meta prepares a privacy preview first. You will review it before the redacted page is read.")}</p>
+          {busy && <p role="status">{t("Preparing and uploading your report…")}</p>}
           {isDemo && (
             <details>
-              <summary>Explore fictional samples</summary>
+              <summary>{t("Explore fictional samples")}</summary>
               <div className="row-actions">
                 {cases.map((item) => (
                   <button
@@ -212,16 +209,15 @@ export function Patient({
           )}
         </section>
       )}
-      {runId && !run && !error && <p role="status">Opening your report…</p>}
+      {runId && !run && !error && <p role="status">{t("Opening your report…")}</p>}
       {run && !ready && !waiting && (
         <p
           className={`banner ${["failed", "interrupted"].includes(run.status) ? "pii" : "review"}`}
           role="status"
         >
           {["failed", "interrupted"].includes(run.status)
-            ? "Processing did not finish. Return to My records and add the report again."
-            : events.at(-1)?.message ||
-              "Preparing your report. You can return to My records and reopen it later."}
+            ? t("Processing did not finish. Return to My records and add the report again.")
+            : (language === "en" ? events.at(-1)?.message : "") || t("Preparing your report. You can return to My records and reopen it later.")}
         </p>
       )}
       {ready && (
@@ -231,36 +227,30 @@ export function Patient({
             aria-current={tab === "notes" ? "page" : undefined}
             onClick={() => setTab("notes")}
           >
-            <PixelVisit /> Doctor's notes
-          </button>
+            <PixelVisit />{t("Doctor's notes")}</button>
           <button
             type="button"
             aria-current={tab === "reading" ? "page" : undefined}
             onClick={() => setTab("reading")}
           >
-            <PixelPill /> Report reading
-          </button>
+            <PixelPill />{t("Report reading")}</button>
           <button
             type="button"
             aria-current={tab === "source" ? "page" : undefined}
             onClick={() => setTab("source")}
           >
-            <PixelDocument /> Image & recording
-          </button>
+            <PixelDocument />{t("Image & recording")}</button>
         </nav>
       )}
       {run && (waiting || (ready && tab === "source")) && (
         <section className="source-module">
           <div className="source-image">
             <h2>
-              {waiting ? "Check the privacy preview" : "Saved report image"}
+              {waiting ? t("Check the privacy preview") : t("Saved report image")}
             </h2>
             {imageUnavailable ? (
               <div className="banner review">
-                <p>
-                  The source preview is unavailable. Saved readings and notes
-                  are still available.
-                </p>
+                <p>{t("The source preview is unavailable. Saved readings and notes are still available.")}</p>
                 <button
                   className="secondary"
                   onClick={() => {
@@ -268,9 +258,7 @@ export function Patient({
                     setImageLoaded(false);
                     setImageAttempt((i) => i + 1);
                   }}
-                >
-                  Retry image
-                </button>
+                >{t("Retry image")}</button>
               </div>
             ) : (
               <div className="sheet">
@@ -279,8 +267,8 @@ export function Patient({
                   src={`${apiBase}${waiting ? run.overlay_url : run.redacted_url}`}
                   alt={
                     waiting
-                      ? "Report with private regions marked in red"
-                      : "Redacted report"
+                      ? t("Report with private regions marked in red")
+                      : t("Redacted report")
                   }
                   onLoad={() => setImageLoaded(true)}
                   onError={() => {
@@ -294,35 +282,27 @@ export function Patient({
           <aside className="source-actions">
             {waiting ? (
               <>
-                <h2>Before processing</h2>
-                <p>
-                  Red marks hidden details. Make sure names, phone numbers and
-                  other identifiers are covered. Green marks the area to be
-                  read.
-                </p>
+                <h2>{t("Before processing")}</h2>
+                <p>{t("Red marks hidden details. Make sure names, phone numbers and other identifiers are covered. Green marks the area to be read.")}</p>
                 <button
                   className="primary"
                   disabled={busy || !imageLoaded || imageUnavailable}
                   onClick={() => void onConfirm()}
-                >
-                  Confirm privacy & continue
-                </button>
+                >{t("Confirm privacy & continue")}</button>
               </>
             ) : (
               <>
-                <h2>Original files</h2>
+                <h2>{t("Original files")}</h2>
                 {run.original_available && (
                   <p>
                     <a
                       href={`${apiBase}/api/runs/${encodeURIComponent(run.run_id)}/files/original`}
-                    >
-                      Download original image
-                    </a>
+                    >{t("Download original image")}</a>
                   </p>
                 )}
                 {run.audio_available && (
                   <>
-                    <label htmlFor="patient-audio">Doctor's recording</label>
+                    <label htmlFor="patient-audio">{t("Doctor's recording")}</label>
                     <audio
                       id="patient-audio"
                       controls
@@ -332,7 +312,7 @@ export function Patient({
                   </>
                 )}
                 {!run.original_available && !run.audio_available && (
-                  <p>No original files available for this record.</p>
+                  <p>{t("No original files available for this record.")}</p>
                 )}
               </>
             )}
@@ -341,16 +321,16 @@ export function Patient({
       )}
       {run && ready && tab === "reading" && (
         <section className="reading-module">
-          <h2>Report reading</h2>
+          <h2>{t("Report reading")}</h2>
           <p className="module-help">
             {run.replay
-              ? "Recorded reading of a fictional sample."
-              : "Provisional AI reading. Handwriting may be misread or missing; check the source with your doctor."}
+              ? t("Recorded reading of a fictional sample.")
+              : t("Provisional AI reading. Handwriting may be misread or missing; check the source with your doctor.")}
           </p>
           {run.extraction ? (
             <div className="clinical-reading-grid">
               <section>
-                <h3>Medicines as written</h3>
+                <h3>{t("Medicines as written")}</h3>
                 {run.extraction.medications.length ? (
                   <ul className="reading-list">
                     {run.extraction.medications.map((m, i) => (
@@ -358,27 +338,27 @@ export function Patient({
                     ))}
                   </ul>
                 ) : (
-                  <p>No medicines extracted.</p>
+                  <p>{t("No medicines extracted.")}</p>
                 )}
               </section>
               <section>
-                <h3>Test results</h3>
+                <h3>{t("Test results")}</h3>
                 {run.extraction.rows.length ? (
                   <div className="table-scroll">
                     <table>
                       <thead>
                         <tr>
-                          <th>Name</th>
-                          <th>Value</th>
-                          <th>Unit</th>
-                          <th>Range</th>
+                          <th>{t("Name")}</th>
+                          <th>{t("Value")}</th>
+                          <th>{t("Unit")}</th>
+                          <th>{t("Range")}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {run.extraction.rows.map((r, i) => (
                           <tr key={i}>
                             <td>{r.raw_name}</td>
-                            <td>{r.value ?? r.value_text ?? "Not recorded"}</td>
+                            <td>{r.value ?? r.value_text ?? t("Not recorded")}</td>
                             <td>{r.unit || "—"}</td>
                             <td>
                               {r.ref_low ?? ""}–{r.ref_high ?? ""}
@@ -389,9 +369,9 @@ export function Patient({
                     </table>
                   </div>
                 ) : (
-                  <p>No test results extracted.</p>
+                  <p>{t("No test results extracted.")}</p>
                 )}
-                <h3>Tests as written</h3>
+                <h3>{t("Tests as written")}</h3>
                 <ul>
                   {run.extraction.advised_tests.map((t, i) => (
                     <li key={i}>{t.raw_name}</li>
@@ -400,7 +380,7 @@ export function Patient({
               </section>
             </div>
           ) : (
-            <p>No reading available. Check the original report.</p>
+            <p>{t("No reading available. Check the original report.")}</p>
           )}
         </section>
       )}
@@ -408,26 +388,24 @@ export function Patient({
         <section className="note-module">
           <div className="module-heading">
             <div>
-              <h2>Your doctor's notes</h2>
-              <p>Reviewed and published by your connected doctor.</p>
+              <h2>{t("Your doctor's notes")}</h2>
+              <p>{t("Reviewed and published by your connected doctor.")}</p>
             </div>
             {published.length > 0 && (
-              <button className="secondary" onClick={() => window.print()}>
-                Print or save as PDF
-              </button>
+              <button className="secondary" onClick={() => window.print()}>{t("Print or save as PDF")}</button>
             )}
           </div>
           {published.length ? (
             published.map((note) => (
               <article className="published-note" key={note.id}>
-                {note.prescription?.length ? <p>Patient: {patientName}</p> : null}
+                {note.prescription?.length ? <p>{t("Patient")}: {patientName}</p> : null}
                 <PrescriptionTable medicines={note.prescription || []} />
                 <p className="source-caption">
-                  {note.author_name || "Doctor"} ·{" "}
+                  {note.author_name || t("Doctor")} ·{" "}
                   {new Date(
                     note.published_at || note.created_at,
-                  ).toLocaleDateString()}
-                  {note.amends_id ? " · Updated note" : ""}
+                  ).toLocaleDateString(locale)}
+                  {note.amends_id ? ` · ${t("Updated note")}` : ""}
                 </p>
                 <div className="note-languages">
                   <div>
@@ -443,16 +421,11 @@ export function Patient({
             ))
           ) : (
             <div className="empty-inline">
-              <p>
-                No published note yet. Your image reading remains provisional
-                until reviewed by a doctor.
-              </p>
+              <p>{t("No published note yet. Your image reading remains provisional until reviewed by a doctor.")}</p>
               <button
                 className="secondary"
                 onClick={() => navigate("/patient?tab=doctors")}
-              >
-                Manage doctor access
-              </button>
+              >{t("Manage doctor access")}</button>
             </div>
           )}
         </section>

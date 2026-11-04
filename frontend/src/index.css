@@ -2,6 +2,9 @@
 @import "@fontsource/geist/500.css";
 @import "@fontsource/geist/600.css";
 @import "@fontsource/geist-mono/400.css";
+@import "@fontsource/noto-sans-bengali/bengali-400.css";
+@import "@fontsource/noto-sans-bengali/bengali-500.css";
+@import "@fontsource/noto-sans-bengali/bengali-600.css";
 @import "tailwindcss";
 
 :root {
@@ -45,7 +48,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font-family: Geist, "Segoe UI", sans-serif;
+  font-family: Geist, "Noto Sans Bengali", "Segoe UI", sans-serif;
   font-size: 16px;
   line-height: 1.5;
   caret-color: var(--fg);
@@ -112,6 +115,7 @@ button:disabled {
 }
 
 .wordmark {
+  min-height: 44px;
   font-weight: 600;
   letter-spacing: -0.03em;
   background: none;
@@ -123,8 +127,8 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface);
@@ -211,7 +215,7 @@ button:disabled {
   padding: 10px 18px;
   border-radius: 999px;
   border: 1px solid var(--fg);
-  transition: transform 180ms var(--ease), background 180ms var(--ease);
+  transition: transform 180ms var(--ease);
 }
 
 .primary {

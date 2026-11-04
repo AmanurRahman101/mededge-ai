@@ -1,3 +1,4 @@
+import { usePatientLanguage, PatientLanguageControl } from "./patientLanguage";
 import { ArrowRight, Plus } from "@phosphor-icons/react";
 import {
   PixelDocument as ClipboardText,
@@ -57,6 +58,7 @@ function currentTab(): PatientTab {
     : "records";
 }
 function RecordMenu({ children }: { children: ReactNode }) {
+  const { t } = usePatientLanguage();
   const menu = useRef<HTMLDetailsElement>(null);
   useEffect(() => {
     function onPointer(event: PointerEvent) {
@@ -79,7 +81,7 @@ function RecordMenu({ children }: { children: ReactNode }) {
   }, []);
   return (
     <details ref={menu} className="record-manage">
-      <summary>Manage</summary>
+      <summary>{t("Manage")}</summary>
       <div
         onClick={(event) => {
           if ((event.target as HTMLElement).closest("button") && menu.current)
@@ -93,6 +95,7 @@ function RecordMenu({ children }: { children: ReactNode }) {
 }
 
 export function PatientChart() {
+  const { t, message, format, locale, language } = usePatientLanguage();
   const user = useApp((state) => state.user);
   const [tab, setTab] = useState<PatientTab>(currentTab);
   useEffect(() => {
@@ -117,6 +120,7 @@ export function PatientChart() {
   const [code, setCode] = useState("");
   const [consentVersion, setConsentVersion] = useState("");
   const [consentText, setConsentText] = useState("");
+  const [consentTextBn, setConsentTextBn] = useState("");
   const [accept, setAccept] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState("");
   const [title, setTitle] = useState("");
@@ -148,7 +152,7 @@ export function PatientChart() {
     } catch (e) {
       if (sequence === requestSequence.current)
         setError(
-          e instanceof Error ? e.message : "Could not load your records.",
+          e instanceof Error ? e.message : t("Could not load your records."),
         );
     } finally {
       if (sequence === requestSequence.current) setLoading(false);
@@ -159,10 +163,12 @@ export function PatientChart() {
       connections: Connection[];
       consent_version: string;
       consent_text: string;
+      consent_text_bn?: string;
     }>("/connections");
     setConnections(people.connections);
     setConsentVersion(people.consent_version);
     setConsentText(people.consent_text);
+    setConsentTextBn(people.consent_text_bn || "");
   }, []);
   const loadActivity = useCallback(async () => {
     const log = await getChart<{ activity: Activity[] }>("/activity");
@@ -178,7 +184,7 @@ export function PatientChart() {
   useEffect(() => {
     void loadConnections().catch((e) =>
       setError(
-        e instanceof Error ? e.message : "Could not load your care team.",
+        e instanceof Error ? e.message : t("Could not load your care team."),
       ),
     );
   }, [loadConnections]);
@@ -213,8 +219,8 @@ export function PatientChart() {
         <div className="workspace-title">
           <PixelWorkspaceIcon workspace="patient" size={42} />
           <div>
-            <h1>My health</h1>
-            <p>{user?.full_name} · Your health information</p>
+            <h1>{t("My health")}</h1>
+            <p>{user?.full_name} · {t("Your health information")}</p>
           </div>
         </div>
         <button
@@ -222,25 +228,24 @@ export function PatientChart() {
           type="button"
           onClick={() => navigate("/patient/upload")}
         >
-          <Plus size={17} /> Add a report
-        </button>
+          <Plus size={17} />{t("Add a report")}</button>
       </header>
-      <nav className="module-tabs" aria-label="Patient chart">
+      <PatientLanguageControl />
+      <nav className="module-tabs patient-navigation" aria-label="Patient chart">
         <button
           type="button"
           aria-current={(tab === "records" || tab === "history") ? "page" : undefined}
           onClick={() => selectTab("records")}
         >
-          <ClipboardText size={18} /> My records
-        </button>
+          <ClipboardText size={18} />{t("My records")}</button>
         <button
           type="button"
           aria-current={tab === "doctors" ? "page" : undefined}
           onClick={() => selectTab("doctors")}
         >
-          <Users size={18} /> My doctors{" "}
+          <Users size={18} />{t("My doctors")}{" "}
           {connections.some((c) => c.status === "pending") && (
-            <span className="chart-dot" aria-label="Pending requests" />
+            <span className="chart-dot" aria-label={language === "bn" ? "নতুন অনুরোধ" : "Pending requests"} />
           )}
         </button>
         <button
@@ -248,12 +253,11 @@ export function PatientChart() {
           aria-current={tab === "summary" ? "page" : undefined}
           onClick={() => selectTab("summary")}
         >
-          <PixelVitals size={18} /> My summary
-        </button>
+          <PixelVitals size={18} />{t("My summary")}</button>
       </nav>
       {error && (
         <p className="banner pii" role="alert">
-          {error}
+          {message(error)}
         </p>
       )}
       {tab === "summary" && user ? (
@@ -264,60 +268,52 @@ export function PatientChart() {
         <section className="chart-section">
           <div className="chart-heading">
             <div>
-              <h2>Your reports</h2>
-              <p className="lede">Choose a report to open it.</p>
+              <h2>{t("Your reports")}</h2>
+              <p className="lede">{t("Choose a report to open it.")}</p>
             </div>
             <button
               className="secondary"
               type="button"
               onClick={() => void loadRecords()}
               disabled={loading}
-            >
-              Refresh
-            </button>
+            >{t("Refresh")}</button>
           </div>
           <div className="patient-search-tools">
             <div className="chart-filters">
-              <label>
-                Find a report
-                <input
+              <label>{t("Find a report")}<input
                   type="search"
                   value={search}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search your records"
+                  placeholder={t("Search your records")}
                 />
               </label>
-              <details className="patient-tools"><summary>Filter reports</summary><div className="advanced-report-filters">
-              <label>
-                Type
-                <select
+              <details className="patient-tools"><summary>{t("Filter reports")}</summary><div className="advanced-report-filters">
+              <label>{t("Type")}<select
                   value={filter}
                   onChange={(e) => {
                     setFilter(e.target.value);
                     setOffset(0);
                   }}
                 >
-                  <option value="">All types</option>
-                  <option value="prescription">Prescription</option>
-                  <option value="lab_report">Lab report</option>
-                  <option value="mixed">Mixed</option>
-                  <option value="other">Other</option>
+                  <option value="">{t("All types")}</option>
+                  <option value="prescription">{t("Prescription")}</option>
+                  <option value="lab_report">{t("Lab report")}</option>
+                  <option value="mixed">{t("Mixed")}</option>
+                  <option value="other">{t("Other")}</option>
                 </select>
               </label>
-              <label>
-                Status
-                <select
+              <label>{t("Status")}<select
                   value={status}
                   onChange={(e) => {
                     setStatus(e.target.value);
                     setOffset(0);
                   }}
                 >
-                  <option value="">All statuses</option>
-                  <option value="reviewing">Ready for review</option>
-                  <option value="approved">Approved</option>
-                  <option value="failed">Failed</option>
-                  <option value="interrupted">Interrupted</option>
+                  <option value="">{t("All statuses")}</option>
+                  <option value="reviewing">{t("Ready for review")}</option>
+                  <option value="approved">{t("Approved")}</option>
+                  <option value="failed">{t("Failed")}</option>
+                  <option value="interrupted">{t("Interrupted")}</option>
                 </select>
               </label>
               <label className="check">
@@ -328,22 +324,23 @@ export function PatientChart() {
                     setArchived(e.target.checked);
                     setOffset(0);
                   }}
-                />{" "}
-                Show archived reports
-              </label>
+                />{" "}{t("Show archived reports")}</label>
               </div></details>
             </div>
           </div>
-          <button className="text-link" type="button" onClick={() => selectTab("history")}>Detailed history</button>
+          {(search || filter || status || archived) && <div className="active-filters" aria-label="Active filters">
+            {search && <span>{search}</span>}{filter && <span>{t(filter === "lab_report" ? "Lab report" : filter === "prescription" ? "Prescription" : filter === "mixed" ? "Mixed" : "Other")}</span>}
+            {status && <span>{message(recordStatus(status))}</span>}{archived && <span>{t("Show archived reports")}</span>}
+            <button className="text-link" type="button" onClick={() => { setSearch(""); setFilter(""); setStatus(""); setArchived(false); setOffset(0); }}>{t("Clear filters")}</button>
+          </div>}
+          <button className="text-link" type="button" onClick={() => selectTab("history")}>{t("Detailed history")}</button>
           {loading ? (
-            <p className="lede" role="status">
-              Loading records…
-            </p>
+            <p className="lede" role="status">{t("Loading records…")}</p>
           ) : records.length === 0 ? (
             <div className="chart-empty">
               <ClipboardText size={25} />
-              <h3>{archived ? "No archived records" : "No records found"}</h3>
-              <p>Upload a report or adjust your search to get started.</p>
+              <h3>{archived ? t("No archived records") : t("No records found")}</h3>
+              <p>{t("Upload a report or adjust your search to get started.")}</p>
             </div>
           ) : (
             <div className="record-list">
@@ -365,46 +362,40 @@ export function PatientChart() {
                           });
                         }}
                       >
-                        <label>
-                          Record title
-                          <input
+                        <label>{t("Record title")}<input
                             value={title}
                             maxLength={120}
                             onChange={(e) => setTitle(e.target.value)}
                             required
                           />
                         </label>
-                        <button className="secondary" disabled={busy}>
-                          Save
-                        </button>
+                        <button className="secondary" disabled={busy}>{t("Save")}</button>
                         <button
                           className="text-link"
                           type="button"
                           onClick={() => setEditing("")}
-                        >
-                          Cancel
-                        </button>
+                        >{t("Cancel")}</button>
                       </form>
                     ) : (
                       <>
                         <h3>
                           {item.title === "Report"
                             ? item.document_type === "prescription"
-                              ? "Prescription"
-                              : "Medical report"
+                              ? t("Prescription")
+                              : t("Medical report")
                             : item.title}
                         </h3>
                         <p>
                           {new Date(item.created_at).toLocaleDateString(
-                            "en-GB",
+                            locale,
                             { day: "numeric", month: "short", year: "numeric" },
                           )}{" "}
                           ·
                           {item.has_published_note
-                            ? "Doctor’s note ready"
+                            ? t("Doctor’s note ready")
                             : item.status === "reviewing"
-                              ? "Not yet checked by a doctor"
-                              : recordStatus(item.status)}
+                              ? t("Not yet checked by a doctor")
+                              : message(recordStatus(item.status))}
                         </p>
                       </>
                     )}
@@ -418,9 +409,7 @@ export function PatientChart() {
                           setEditing(item.run_id);
                           setTitle(item.title);
                         }}
-                      >
-                        Rename
-                      </button>
+                      >{t("Rename")}</button>
                       <button
                         className="text-link"
                         type="button"
@@ -433,7 +422,7 @@ export function PatientChart() {
                           )
                         }
                       >
-                        {archived ? "Restore" : "Archive"}
+                        {archived ? t("Restore") : t("Archive")}
                       </button>
                       <button
                         className="text-link danger-link"
@@ -442,16 +431,14 @@ export function PatientChart() {
                         onClick={() => {
                           if (
                             window.confirm(
-                              `Permanently delete “${item.title}” and its notes? This cannot be undone.`,
+                              format("Permanently delete “{title}” and its notes? This cannot be undone.", { title: item.title }),
                             )
                           )
                             void action(() =>
                               deleteChart(`/records/${item.run_id}`),
                             );
                         }}
-                      >
-                        Delete
-                      </button>
+                      >{t("Delete")}</button>
                     </RecordMenu>
                     <button
                       className="record-open"
@@ -460,8 +447,7 @@ export function PatientChart() {
                       onClick={() =>
                         navigate(`/patient/records/${item.run_id}`)
                       }
-                    >
-                      Open report <ArrowRight size={20} />
+                    >{t("Open report")}<ArrowRight size={20} />
                     </button>
                   </div>
                 </article>
@@ -475,18 +461,14 @@ export function PatientChart() {
                 type="button"
                 disabled={offset === 0 || loading}
                 onClick={() => setOffset(Math.max(0, offset - 20))}
-              >
-                Previous
-              </button>
-              <span>Page {Math.floor(offset / 20) + 1}</span>
+              >{t("Previous")}</button>
+              <span>{t("Page")}{Math.floor(offset / 20) + 1}</span>
               <button
                 className="secondary"
                 type="button"
                 disabled={!hasMore || loading}
                 onClick={() => setOffset(offset + 20)}
-              >
-                Next
-              </button>
+              >{t("Next")}</button>
             </div>
           )}
         </section>
@@ -494,10 +476,8 @@ export function PatientChart() {
         <section className="chart-section">
           <div className="chart-heading">
             <div>
-              <h2>My doctors</h2>
-              <p className="lede">
-                You decide which doctors can see your reports.
-              </p>
+              <h2>{t("My doctors")}</h2>
+              <p className="lede">{t("You decide which doctors can see your reports.")}</p>
               <button
                 className="text-link"
                 type="button"
@@ -506,13 +486,11 @@ export function PatientChart() {
                     setError(
                       e instanceof Error
                         ? e.message
-                        : "Could not load your care team.",
+                        : t("Could not load your care team."),
                     ),
                   )
                 }
-              >
-                Check for requests
-              </button>
+              >{t("Check for requests")}</button>
             </div>
             <button
               className="secondary"
@@ -526,52 +504,44 @@ export function PatientChart() {
                   setCode(value.code);
                 })
               }
-            >
-              Share with a doctor
-            </button>
+            >{t("Share with a doctor")}</button>
           </div>
           {code && (
             <div className="connection-code">
               <div>
-                <span>ONE-TIME CODE · VALID FOR 20 MINUTES</span>
+                <span>{t("ONE-TIME CODE · VALID FOR 20 MINUTES")}</span>
                 <strong>{code}</strong>
               </div>
-              <p>
-                Give this code to your doctor. They can request access, but
-                cannot see your chart until you approve.
-              </p>
+              <p>{t("Give this code to your doctor. They can request access, but cannot see your chart until you approve.")}</p>
             </div>
           )}
           {connections.length === 0 && (
             <div className="chart-empty">
               <Users size={25} />
-              <h3>No connections yet</h3>
-              <p>Create a code when you’re ready to connect with a doctor.</p>
+              <h3>{t("No connections yet")}</h3>
+              <p>{t("Create a code when you’re ready to connect with a doctor.")}</p>
             </div>
           )}
           {connections.map((c) => (
             <article className="connection-card" key={c.doctor_id}>
               <div>
-                <h3>{c.name || "Doctor"}</h3>
+                <h3>{c.name || t("Doctor")}</h3>
                 <p>
                   {c.status === "approved"
-                    ? "Can see your reports"
+                    ? t("Can see your reports")
                     : c.status === "pending"
-                      ? "Wants to see your reports"
-                      : "Cannot see your reports"}
+                      ? t("Wants to see your reports")
+                      : t("Cannot see your reports")}
                 </p>
                 <details>
-                  <summary>Doctor details</summary>
+                  <summary>{t("Doctor details")}</summary>
                   <p>{c.email}</p>
-                  <p>
-                    Professional qualifications have not been checked by
-                    MedEdge.
-                  </p>
+                  <p>{t("Professional qualifications have not been checked by MedEdge.")}</p>
                 </details>
               </div>
               {c.status === "pending" && (
                 <div className="consent-details">
-                  <p>{consentText}</p>
+                  <p lang={language === "bn" && consentTextBn ? "bn" : "en"}>{language === "bn" && consentTextBn ? consentTextBn : consentText}</p>
                   <label className="check">
                     <input
                       type="checkbox"
@@ -582,9 +552,7 @@ export function PatientChart() {
                           [c.doctor_id]: e.target.checked,
                         })
                       }
-                    />
-                    I understand what this doctor can see and do.
-                  </label>
+                    />{t("I understand what this doctor can see and do.")}</label>
                   <div className="row-actions">
                     <button
                       className="primary"
@@ -603,9 +571,7 @@ export function PatientChart() {
                           ),
                         )
                       }
-                    >
-                      Allow this doctor
-                    </button>
+                    >{t("Allow this doctor")}</button>
                     <button
                       className="secondary"
                       type="button"
@@ -618,9 +584,7 @@ export function PatientChart() {
                           ),
                         )
                       }
-                    >
-                      Do not allow
-                    </button>
+                    >{t("Do not allow")}</button>
                   </div>
                 </div>
               )}
@@ -632,16 +596,14 @@ export function PatientChart() {
                   onClick={() => {
                     if (
                       window.confirm(
-                        `Stop sharing your reports with ${c.name || "this doctor"}?`,
+                        format("Stop sharing your reports with {name}?", { name: c.name || t("Doctor") }),
                       )
                     )
                       void action(() =>
                         post(`/api/chart/connections/${c.doctor_id}/revoke`),
                       );
                   }}
-                >
-                  Stop sharing
-                </button>
+                >{t("Stop sharing")}</button>
               )}
             </article>
           ))}
@@ -650,8 +612,8 @@ export function PatientChart() {
         <section className="chart-section">
           <div className="chart-heading">
             <div>
-              <h2>Recent changes</h2>
-              <p className="lede">Changes to your reports and doctor access.</p>
+              <h2>{t("Recent changes")}</h2>
+              <p className="lede">{t("Changes to your reports and doctor access.")}</p>
             </div>
             <button
               className="secondary"
@@ -663,15 +625,13 @@ export function PatientChart() {
                   ),
                 )
               }
-            >
-              Refresh
-            </button>
+            >{t("Refresh")}</button>
           </div>
           {activity.length === 0 ? (
             <div className="chart-empty">
               <ShieldCheck size={25} />
-              <h3>No activity yet</h3>
-              <p>Changes to your chart will appear here.</p>
+              <h3>{t("No activity yet")}</h3>
+              <p>{t("Changes to your chart will appear here.")}</p>
             </div>
           ) : (
             <ol className="activity-list">
@@ -681,9 +641,9 @@ export function PatientChart() {
                 .map((entry) => (
                   <li key={entry.id}>
                     <strong>
-                      {activityText[entry.action] || "Your record was updated"}
+                      {message(activityText[entry.action] || "Your record was updated")}
                     </strong>
-                    <time>{new Date(entry.occurred_at).toLocaleString()}</time>
+                    <time>{new Date(entry.occurred_at).toLocaleString(locale)}</time>
                     {entry.run_id && (
                       <button
                         className="text-link"
@@ -691,15 +651,13 @@ export function PatientChart() {
                         onClick={() =>
                           navigate(`/patient/records/${entry.run_id}`)
                         }
-                      >
-                        Open record
-                      </button>
+                      >{t("Open record")}</button>
                     )}
                   </li>
                 ))}
             </ol>
           )}
-          {activity.filter(entry => entry.action !== "summary_amendment_started").length > 5 && <button className="secondary" type="button" onClick={() => setOlderActivity(value => !value)}>{olderActivity ? "Show fewer changes" : "Show older changes"}</button>}
+          {activity.filter(entry => entry.action !== "summary_amendment_started").length > 5 && <button className="secondary" type="button" onClick={() => setOlderActivity(value => !value)}>{olderActivity ? t("Show fewer changes") : t("Show older changes")}</button>}
         </section>
       )}
 

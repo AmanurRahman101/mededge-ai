@@ -41,13 +41,13 @@ test("manual prescription: registry lookup, editing, publication, patient view a
   await row.getByLabel("Morning", {exact:true}).fill("½");
   await row.getByLabel("Noon", {exact:true}).fill("0");
   await row.getByLabel("Duration", {exact:true}).fill("চলবে");
-  await row.locator("details > summary").click();
+  await row.locator(":scope > details > summary").click();
   await row.getByLabel("Find a Bangladesh medicine").fill("Napa");
   await row.getByRole("button", {name:"Search",exact:true}).click();
   await expect(row.locator(".medicine-search-results")).toContainText("Fictional ingredient 5 mg");
   await row.getByRole("button", {name:/Choose Fictional reference brand/}).click();
   await expect(row.getByLabel("Medicine name",{exact:true})).toHaveValue("Fictional reference brand");
-  await row.locator("details > summary").click();
+  await row.locator(":scope > details > summary").click();
   await row.getByRole("checkbox").check();
   await page.getByRole("button", {name:"Save draft",exact:true}).click();
   await expect(page.getByText("Prescription draft saved.",{exact:true})).toBeVisible();

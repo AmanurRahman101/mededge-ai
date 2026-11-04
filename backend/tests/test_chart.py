@@ -76,6 +76,12 @@ def test_doctor_overview_requires_consent_and_excludes_drafts(request):
 def test_connection_requires_patient_approval_and_revocation_blocks_access(request):
     client = request.getfixturevalue("access_client")
     sign_in(client, "patient1")
+    consent = client.get("/api/chart/connections").json()
+    assert consent["consent_version"] == "chart-access-v2"
+    assert "until I revoke access" in consent["consent_text"]
+    assert "Meta" in consent["consent_text_bn"]
+    assert "ডাউনলোড করা তথ্য ফেরত নেওয়া যায় না" in consent["consent_text_bn"]
+    assert "পেশাগত যোগ্যতা যাচাই করা হয়নি" in consent["consent_text_bn"]
     code = client.post("/api/chart/connection-code").json()["code"]
     sign_in(client, "doctor")
     assert client.post("/api/chart/requests", json={"code": code}).json()["status"] == "pending"
@@ -93,6 +99,7 @@ def test_connection_requires_patient_approval_and_revocation_blocks_access(reque
         == 200
     )
     sign_in(client, "doctor")
+    assert client.get("/api/runs/record").json()["patient_id"] == "patient1"
     assert client.get("/api/runs/record").status_code == 200
     sign_in(client, "patient1")
     assert client.post("/api/chart/connections/doctor/revoke").status_code == 200

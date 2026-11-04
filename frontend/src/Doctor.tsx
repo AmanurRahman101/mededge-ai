@@ -1,3 +1,4 @@
+import { PublicationChecks } from "./PublicationChecks";
 import { PatientSwitcher } from "./PatientSwitcher";
 import {
   useCallback,
@@ -18,7 +19,7 @@ import {
 import { useRecorder } from "./useRecorder";
 import { MedicineLookup } from "./MedicineLookup";
 import { NewPrescription, PrescriptionWorkspace } from "./PrescriptionWorkspace";
-import { navigate, registerNavigationGuard } from "./navigation";
+import { navigate, registerNavigationGuard, doctorRecordUrl, recordReturnUrl, doctorChartUrl, restorePageScroll } from "./navigation";
 import { useApp } from "./store";
 import { prepareImage } from "./image";
 import { ChartOverview, recordStatus } from "./ChartOverview";
@@ -98,10 +99,10 @@ function issues(value: string | string[]): string[] {
 }
 
 
-function doctorLocation(): { patientId: string; section: "overview" | "history" | "add" } {
+function doctorLocation(): { patientId: string; section: "overview" | "history" | "add"; offset: number } {
   const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
   const section = params.get("section");
-  return { patientId: params.get("patient") || "", section: section === "history" || section === "add" ? section : "overview" };
+  return { offset: Math.min(100000, Math.max(0, Math.floor(Number(params.get("page")) || 0))) * 20, patientId: params.get("patient") || "", section: section === "history" || section === "add" ? section : "overview" };
 }
 
 export function Doctor({
@@ -127,13 +128,14 @@ export function Doctor({
   const [patientId, setPatientId] = useState(() => doctorLocation().patientId);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [more, setMore] = useState(false);
-  const [offset, setOffset] = useState(0);
+  const [offset, setOffset] = useState(() => doctorLocation().offset);
   const [code, setCode] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [sourceRunId, setSourceRunId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [summaryLoadState, setSummaryLoadState] = useState<"loading" | "ready" | "failed">("loading");
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [draft, setDraft] = useState<Summary | null>(null);
   const savedDraft = useRef("");
@@ -161,7 +163,7 @@ export function Doctor({
         recorder.discard(); key.current = crypto.randomUUID();
       }
       locationPatient.current = next.patientId;
-      setPatientId(next.patientId); setChartTab(next.section); setOffset(0); setError("");
+      setPatientId(next.patientId); setChartTab(next.section); setOffset(next.offset); setError("");
     };
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
@@ -204,6 +206,8 @@ export function Doctor({
     }
   }, [chartTab]);
   const loadSummaries = useCallback(async (id: string) => {
+    setSummaryLoadState("loading");
+    try {
     const data = await getChart<{ summaries: Summary[] }>(
       `/records/${encodeURIComponent(id)}/summaries`,
     );
@@ -212,6 +216,8 @@ export function Doctor({
     savedDraft.current = nextDraft ? JSON.stringify([nextDraft.transcript, nextDraft.summary_en, nextDraft.summary_bn]) : "";
     setDraft(nextDraft);
     setAcknowledged(false);
+    setSummaryLoadState("ready");
+    } catch (error) { setSummaryLoadState("failed"); throw error; }
   }, []);
   useEffect(() => {
     void loadConnections().catch((caught) => setError(textError(caught)));
@@ -290,6 +296,7 @@ export function Doctor({
       setBusy(false);
     }
   }
+  useEffect(() => { if (!recordsLoading && records.length) restorePageScroll(); }, [recordsLoading, records]);
   function togglePatient(id: string) {
     navigate(`/doctor?patient=${encodeURIComponent(id)}&section=overview`);
   }
@@ -414,9 +421,9 @@ export function Doctor({
         <button
           className="back-link"
           type="button"
-          onClick={() => navigate("/doctor")}
+          onClick={() => navigate(recordReturnUrl(new URLSearchParams(window.location.search).get("patient") || undefined))}
         >
-          ← Back to patients
+          ← Back to patient chart
         </button>
         <h1>Opening record…</h1>
         {(error || runError) && (
@@ -665,7 +672,7 @@ export function Doctor({
                             type="button"
                             key={record.run_id}
                             onClick={() =>
-                              navigate(`/doctor/records/${record.run_id}`)
+                              navigate(doctorRecordUrl(record.run_id, patientId, offset))
                             }
                           >
                             <PixelDocument size={25} />
@@ -698,7 +705,7 @@ export function Doctor({
                       <button
                         className="secondary"
                         disabled={!offset || recordsLoading}
-                        onClick={() => setOffset(Math.max(0, offset - 20))}
+                        onClick={() => navigate(doctorChartUrl(patientId, Math.max(0, offset / 20 - 1)))}
                       >
                         Previous
                       </button>
@@ -706,7 +713,7 @@ export function Doctor({
                       <button
                         className="secondary"
                         disabled={!more || recordsLoading}
-                        onClick={() => setOffset(offset + 20)}
+                        onClick={() => navigate(doctorChartUrl(patientId, offset / 20 + 1))}
                       >
                         Next
                       </button>
@@ -906,9 +913,9 @@ export function Doctor({
       <button
         className="back-link"
         type="button"
-        onClick={() => navigate("/doctor")}
+        onClick={() => navigate(recordReturnUrl(run.patient_id))}
       >
-        ← Back to patients
+        ← Back to patient chart
       </button>
       <header className="workspace-heading">
         <div className="workspace-title">
@@ -1164,6 +1171,8 @@ export function Doctor({
       )}
       {ready && recordTab === "note" && (
         <section className="note-module">
+          {summaryLoadState === "loading" && <p role="status">Loading the saved note…</p>}
+          {summaryLoadState === "failed" && <div className="banner pii" role="alert">The saved note could not be loaded. <button type="button" className="secondary" onClick={() => void loadSummaries(run.run_id).catch(caught => setError(textError(caught)))}>Try loading again</button></div>}
           {draft ? (
             <>
               <div className="module-heading">
@@ -1178,6 +1187,7 @@ export function Doctor({
               <label className="auth-field">
                 Voice transcript
                 <textarea
+                  id="note-transcript"
                   rows={4}
                   disabled={busy}
                   value={draft.transcript}
@@ -1203,6 +1213,7 @@ export function Doctor({
                 <label className="auth-field">
                   English version
                   <textarea
+                    id="note-en"
                     rows={7}
                     disabled={busy}
                     value={draft.summary_en}
@@ -1215,6 +1226,7 @@ export function Doctor({
                 <label className="auth-field">
                   বাংলা সংস্করণ
                   <textarea
+                    id="note-bn"
                     lang="bn"
                     disabled={busy}
                     rows={7}
@@ -1226,10 +1238,18 @@ export function Doctor({
                   />
                 </label>
               </div>
-              <div className="publish-bar">
+              <PublicationChecks items={[
+                ...(!draft.transcript.trim() ? [{ text: "Add the voice transcript", target: "note-transcript" }] : []),
+                ...(!draft.summary_en.trim() ? [{ text: "Add the English version", target: "note-en" }] : []),
+                ...(!draft.summary_bn.trim() ? [{ text: "Add the Bangla version", target: "note-bn" }] : []),
+                ...(!acknowledged ? [{ text: "Review both versions and complete the final check", target: "note-reviewed" }] : []),
+              ]} />
+              <div className="publish-bar prescription-publish-bar">
+                <p className="draft-status" role="status">{busy ? "Saving…" : draftDirty ? "Unsaved changes" : "Saved"}</p>
                 <label className="check">
                   <input
                     type="checkbox"
+                    id="note-reviewed"
                     checked={acknowledged}
                     onChange={(e) => setAcknowledged(e.target.checked)}
                   />
@@ -1261,7 +1281,7 @@ export function Doctor({
               </div>
             </>
           ) : (
-            !summaries.some((s) => s.status === "published") && (
+            summaryLoadState === "ready" && !summaries.some((s) => s.status === "published") && (
               <div className="empty-inline">
                 <h2>No doctor-published note</h2>
                 <p>

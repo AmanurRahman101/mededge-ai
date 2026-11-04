@@ -41,6 +41,7 @@ export interface Run {
   run_id: string;
   input_mode?: string;
   patient_name?: string;
+  patient_id?: string;
   status: string;
   pseudonym: string;
   document_type: string | null;

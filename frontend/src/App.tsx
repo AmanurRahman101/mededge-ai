@@ -1,3 +1,4 @@
+import { usePatientLanguage } from "./patientLanguage";
 import { UserCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -17,6 +18,8 @@ export const DISCLAIMER =
   "MedEdge AI is an administrative data interoperability and optical ingestion pipeline, not a clinical decision or diagnostic tool.";
 
 export function App() {
+  const { t, message, language } = usePatientLanguage();
+  const [locationKey, setLocationKey] = useState(window.location.pathname + window.location.search);
   const theme = useApp((state) => state.theme);
   const toggleTheme = useApp((state) => state.toggleTheme);
   const user = useApp((state) => state.user);
@@ -74,7 +77,7 @@ export function App() {
     return () => { active = false; unsubscribe(); window.removeEventListener("focus", onFocus); window.removeEventListener("mededge-session-invalidated", onInvalidated); };
   }, [user?.id]);
   useEffect(() => {
-    const onNavigation = () => setPath(window.location.pathname);
+    const onNavigation = () => { setPath(window.location.pathname); setLocationKey(window.location.pathname + window.location.search); };
     window.addEventListener("popstate", onNavigation);
     return () => window.removeEventListener("popstate", onNavigation);
   }, []);
@@ -100,6 +103,27 @@ export function App() {
       setActionError(`You’re signed in with a ${user.role} account. Your ${user.role} workspace is open.`);
     }
   }, [checking, connectionError, path, user, sessionPaused]);
+
+  useEffect(() => {
+    if (checking || connectionError) return;
+    const frame = requestAnimationFrame(() => {
+      const heading = document.querySelector<HTMLElement>("main h1");
+      const target = heading || document.querySelector<HTMLElement>("main");
+      if (!target) return;
+      target.tabIndex = -1;
+      if (heading) document.title = `${heading.textContent} · MedEdge AI`;
+      target.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [locationKey, checking, connectionError]);
+  useEffect(() => {
+    const updateTitle = () => { const heading = document.querySelector("main h1"); if (heading) document.title = `${heading.textContent} · MedEdge AI`; };
+    const observer = new MutationObserver(updateTitle);
+    const root = document.getElementById("root");
+    if (root) observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => { document.documentElement.lang = user?.role === "patient" ? language : "en"; }, [language, user?.role]);
 
   async function signOut() {
     if (signingOut || !confirmNavigation()) return;
@@ -142,7 +166,7 @@ export function App() {
           >
             <PixelWorkspaceIcon workspace={user.role} size={24} />
             <span>
-              {user.role === "doctor" ? "Doctor workspace" : "Patient portal"}
+              {user.role === "doctor" ? "Doctor workspace" : t("Patient portal")}
             </span>
           </button>
         )}
@@ -151,11 +175,11 @@ export function App() {
             <>
               <button
                 className="top-link account-link"
-                aria-label="Account"
+                aria-label={t("Account")}
                 onClick={() => navigate("/account")}
                 type="button"
               >
-                <UserCircle size={19} /> <span>Account</span>
+                <UserCircle size={19} /> <span>{t("Account")}</span>
               </button>
               <button
                 className="top-link"
@@ -163,7 +187,7 @@ export function App() {
                 onClick={() => void signOut()}
                 type="button"
               >
-                {signingOut ? "Signing out…" : "Sign out"}
+                {signingOut ? t("Signing out…") : t("Sign out")}
               </button>
             </>
           ) : !["/signin", "/signup", "/verify-email", "/forgot-password", "/reset-password", "/check-email"].includes(path) ? (
@@ -179,14 +203,14 @@ export function App() {
             className="icon-button"
             type="button"
             onClick={toggleTheme}
-            aria-label={theme === "dark" ? "Use light mode" : "Use dark mode"}
+            aria-label={theme === "dark" ? t("Use light mode") : t("Use dark mode")}
           >
             <PixelThemeToggle dark={theme === "dark"} size={20} />
           </button>
         </nav>
       </header>
       {actionError && <div className="banner pii" role="alert">{actionError} <button className="text-link" type="button" onClick={() => setActionError("")}>Dismiss message</button></div>}
-      {sessionPaused && <div className="session-warning" role="alert"><h1>{pauseReason === "checking" ? "Checking your session…" : pauseReason === "expired" ? "Please sign in again" : pauseReason === "offline" ? "We couldn’t check your session" : "Account changed"}</h1><p>{pauseReason === "offline" ? "Check your connection, then try again. Your work stays in this tab while it remains open." : "This tab is paused to protect your work. Sign in to the original account in another tab, then return here. Unsaved edits remain in this tab while it stays open."}</p>{pauseReason !== "checking" && <><a href="/signin" target="_blank" rel="noreferrer">Open sign in in a new tab</a><button type="button" className="secondary" onClick={() => window.dispatchEvent(new Event("mededge-session-invalidated"))}>Check account again</button></>}</div>}
+      {sessionPaused && <div className="session-warning" role="alert"><h1>{message(pauseReason === "checking" ? "Checking your session…" : pauseReason === "expired" ? "Please sign in again" : pauseReason === "offline" ? "We couldn’t check your session" : "Account changed")}</h1><p>{message(pauseReason === "offline" ? "Check your connection, then try again. Your work stays in this tab while it remains open." : "This tab is paused to protect your work. Sign in to the original account in another tab, then return here. Unsaved edits remain in this tab while it stays open.")}</p>{pauseReason !== "checking" && <><a href="/signin" target="_blank" rel="noreferrer">{t("Open sign in in a new tab")}</a><button type="button" className="secondary" onClick={() => window.dispatchEvent(new Event("mededge-session-invalidated"))}>{t("Check account again")}</button></>}</div>}
       {checking ? (
         <main className="stage loading-stage" aria-live="polite">
           <span className="loading-dot" /> Connecting to MedEdge…

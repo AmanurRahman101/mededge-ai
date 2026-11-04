@@ -37,3 +37,11 @@ Registry lookup searches only when the user selects Search or presses Enter. Sel
 ## Entry pages
 
 Keep the landing page's two workspace choices and pixel illustrations. Each choice has a workspace title, one short description and one action. Authentication uses a centered 440px form with persistent labels and no promotional sidebar. Sign-up uses simple patient/doctor choices; the doctor credential disclosure remains visible when selected. Recovery, verification and fictional demo access remain available, with secondary sign-in options collapsed below the main form. Preserve the footer and both themes.
+
+## Patient language and review clarity
+
+Patients choose English or Bangla once per device; the initial choice follows the browser language. Translate interface controls, consent, privacy instructions, known error messages and dates without rewriting clinical evidence, medicine names or the doctor's authored text. Use self-hosted Noto Sans Bengali for Bengali glyphs and Geist for Latin text. Keep the original footer. Language changes never trigger processing or discard an unfinished medicine form.
+
+Patient mobile navigation uses three equal icon-and-label choices, without uneven wrapping. Keep search visible, show active filters with Clear filters, and put optional medicine-reference search after direct medicine entry. Doctor record links retain the patient and history page. Route changes focus the destination heading and update the document title.
+
+Prescription and dictated-note publication show linked outstanding checks rather than only a disabled button. Confirmed medication rows may be collapsed explicitly and reopened for editing. Changes still invalidate confirmation. Display saved/unsaved/saving status; keep English and Bangla assessment editors beside each other on desktop. Loading failures must never appear as an empty saved prescription. Do not animate button background colors across a theme switch because transient foreground/background mismatches reduce contrast.
