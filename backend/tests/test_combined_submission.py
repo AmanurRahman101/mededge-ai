@@ -130,7 +130,15 @@ def test_public_export_is_disabled(request):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("with_audio,revoke_during_voice,fhir_failure", [(True, False, False), (True, True, False), (False, False, False), (False, False, True)])
+@pytest.mark.parametrize(
+    "with_audio,revoke_during_voice,fhir_failure",
+    [
+        (True, False, False),
+        (True, True, False),
+        (False, False, False),
+        (False, False, True),
+    ],
+)
 async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocation(
     request, monkeypatch, with_audio, revoke_during_voice, fhir_failure
 ):
@@ -203,7 +211,15 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
         monkeypatch.setattr(orchestrator, "_build_bundle", fail_bundle)
     image = io.BytesIO()
     Image.new("RGB", (100, 100), "white").save(image, format="PNG")
-    ctx = RunContext("combo", image.getvalue(), recording() if with_audio else None, None, True, False, "image/png")
+    ctx = RunContext(
+        "combo",
+        image.getvalue(),
+        recording() if with_audio else None,
+        None,
+        True,
+        False,
+        "image/png",
+    )
     await orchestrator.execute(ctx)
     with db.session() as session:
         drafts = session.exec(

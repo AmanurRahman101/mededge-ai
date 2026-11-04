@@ -304,7 +304,10 @@ class Orchestrator:
             transcript = ""
             if ctx.audio:
                 self.bus.publish(
-                    run_id, Stage.TRANSCRIBE, EventKind.STARTED, "Transcribing the doctor's recording"
+                    run_id,
+                    Stage.TRANSCRIBE,
+                    EventKind.STARTED,
+                    "Transcribing the doctor's recording",
                 )
                 voice = await transcribe_wav(self.http, self.settings, ctx.audio)
                 ctx.audio = None
@@ -313,7 +316,12 @@ class Orchestrator:
                 if not transcript:
                     raise ValueError("No speech detected; submit the recording again.")
                 self._check_consent(ctx)
-                self.bus.publish(run_id, Stage.TRANSCRIBE, EventKind.COMPLETED, "Recording transcribed")
+                self.bus.publish(
+                    run_id,
+                    Stage.TRANSCRIBE,
+                    EventKind.COMPLETED,
+                    "Recording transcribed",
+                )
             self.bus.publish(
                 run_id,
                 Stage.EXTRACT,
@@ -325,7 +333,14 @@ class Orchestrator:
                 "extractor",
                 instructions=DICTATION_INSTRUCTIONS,
                 parts=[
-                    TextPart("Doctor transcript: " + transcript if transcript else "No voice recording was provided. Read the image only; do not invent spoken evidence."),
+                    TextPart(
+                        "Doctor transcript: " + transcript
+                        if transcript
+                        else (
+                            "No voice recording was provided. "
+                            "Read the image only; do not invent spoken evidence."
+                        )
+                    ),
                     ImagePart(result.redacted_png, "image/png"),
                 ],
                 schema=ConsultationDraft,
@@ -363,7 +378,12 @@ class Orchestrator:
                         unresolved=json.dumps(combined.value.unresolved),
                         prescription_json=json.dumps(
                             [
-                                m.model_copy(update={"confirmed": False, **({"spoken_text": ""} if not transcript else {})}).model_dump()
+                                m.model_copy(
+                                    update={
+                                        "confirmed": False,
+                                        **({"spoken_text": ""} if not transcript else {}),
+                                    }
+                                ).model_dump()
                                 for m in combined.value.medicines
                             ],
                             ensure_ascii=False,
