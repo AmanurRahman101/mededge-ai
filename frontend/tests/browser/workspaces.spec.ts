@@ -11,10 +11,35 @@ async function session(context: BrowserContext, role: "doctor" | "patient") {
   ]);
 }
 async function noOverflow(page: Page) {
+  const geometry = await page.evaluate(() => ({
+    viewport: window.innerWidth,
+    document: document.documentElement.scrollWidth,
+    styles: (() => {
+      const account = document.querySelector<HTMLElement>(".account-link");
+      const actions = document.querySelector<HTMLElement>(".top-actions");
+      return account && actions ? {
+        accountWidth: account.getBoundingClientRect().width,
+        accountMax: getComputedStyle(account).maxWidth,
+        actionsGap: getComputedStyle(actions).gap,
+        actionsWidth: actions.getBoundingClientRect().width,
+        topbarPadding: getComputedStyle(document.querySelector(".topbar")!).padding,
+      } : null;
+    })(),
+    overflowing: [...document.querySelectorAll("body *")]
+      .map((element) => ({
+        element: `${element.tagName.toLowerCase()}.${(element as HTMLElement).className}`,
+        left: Math.round(element.getBoundingClientRect().left),
+        right: Math.round(element.getBoundingClientRect().right),
+        text: element.textContent?.trim().slice(0, 48),
+      }))
+      .filter((box) => box.left < -1 || box.right > window.innerWidth + 1)
+      .slice(0, 8),
+  }));
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,
     ),
+    JSON.stringify(geometry),
   ).toBe(true);
   const clipped = await page
     .locator("button, input:not([type=file]), select, summary")

@@ -486,7 +486,20 @@ td input:focus {
   .demo-heading { margin-top: 46px; }
 }
 @media (max-width: 370px) {
-  .account-link span { display: none; }
+  .care-app .topbar { padding-inline: 12px; }
+  .care-app .topbar .top-actions { gap: 3px; }
+  .care-app .topbar .account-link { max-width: 72px; }
+}
+
+.care-app .account-link {
+  min-width: 0;
+  max-width: 10rem;
+}
+.care-app .account-link span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 @media (prefers-reduced-motion: reduce) {
   .choice-arrow, .demo-item svg { transition: none; }

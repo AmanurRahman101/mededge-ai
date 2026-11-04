@@ -97,7 +97,15 @@ test("patient and doctor primary screens pass automated accessibility checks in 
   for(const role of ["patient","doctor"] as const){
     await context.addCookies([{name:"mededge_session",value:`ui-${role}`,url:"http://127.0.0.1:8023"}]);
     await page.goto(`/${role}`);
-    await expect(page.getByRole("button",{name:"Account",exact:true})).toBeVisible();
+    await expect(page.locator(".account-link")).toBeVisible();
+    if(role === "patient"){
+      await expect(page.locator(".account-link")).toContainText("Nadia (fictional)");
+      await expect(page.locator(".care-navigation")).not.toContainText("Nadia (fictional)");
+      await page.getByRole("button",{name:"Medicines",exact:true}).click();
+      await expect(page).toHaveURL(/\/patient\/medicines$/);
+      await expect(page.getByRole("heading",{name:"Medicines",exact:true})).toBeVisible();
+      await page.goto("/patient");
+    }
     for(const theme of ["light","dark"]){
       await page.evaluate(t=>document.documentElement.classList.toggle("dark",t==="dark"),theme);
       for(const width of [320,1440]){

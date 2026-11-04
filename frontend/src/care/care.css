@@ -52,12 +52,6 @@
   color: var(--fg);
   font-weight: 600;
 }
-.care-signed-in {
-  color: var(--muted);
-  font-size: 13px;
-  margin: 28px 12px;
-  overflow-wrap: anywhere;
-}
 .care-main {
   min-width: 0;
   padding: 24px 0 48px 32px;
@@ -450,8 +444,7 @@
     border: 0;
     border-bottom: 1px solid var(--line);
   }
-  .care-role,
-  .care-signed-in {
+  .care-role {
     display: none;
   }
   .care-navigation nav {

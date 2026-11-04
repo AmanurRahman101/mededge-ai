@@ -184,11 +184,12 @@ export function App() {
             <>
               <button
                 className="top-link account-link"
-                aria-label={t("Account")}
+                aria-label={`${t("Account")}: ${user.full_name}`}
+                title={user.full_name}
                 onClick={() => navigate("/account")}
                 type="button"
               >
-                <UserCircle size={19} /> <span>{t("Account")}</span>
+                <UserCircle size={19} /> <span>{user.full_name}</span>
               </button>
               <button
                 className="top-link"

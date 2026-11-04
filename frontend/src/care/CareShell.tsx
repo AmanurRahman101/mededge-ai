@@ -6,6 +6,7 @@ import {
   PixelDocument,
   PixelVisit,
   PixelVitals,
+  PixelPill,
 } from "../PixelIcons";
 import { useApp } from "../store";
 
@@ -59,6 +60,11 @@ export function CareShell({
           icon: PixelVisit,
         },
         {
+          path: "/patient/medicines",
+          label: text("Medicines", "ওষুধ"),
+          icon: PixelPill,
+        },
+        {
           path: "/patient/files",
           label: text("Reports", "রিপোর্ট"),
           icon: PixelDocument,
@@ -107,7 +113,6 @@ export function CareShell({
             </button>
           ))}
         </nav>
-        <p className="care-signed-in">{user.full_name}</p>
       </aside>
       <main className="care-main">
         <div className="care-toolbar">

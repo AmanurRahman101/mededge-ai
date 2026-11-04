@@ -136,7 +136,7 @@ The palette is neutral first. Frontmatter records light and dark values; CSS cus
 
 The centered care shell is at most (1280px) wide with (24px) exterior gutters. Desktop navigation occupies (208px); the main column starts with a (32px) inset. Patient selection is a searchable list page followed by a focused overview and dated visit rows. The rail holds workspace navigation rather than a persistent patient directory.
 
-At (760px) and below, navigation becomes a horizontal row of equal icon-and-label choices with (16px) exterior gutters and (64px) minimum navigation targets. The role banner and signed-in name disappear. Patients have four choices: Home, Visits, Reports and Doctors. Doctors retain their own workspace choices. Preserve content order on phones.
+At (760px) and below, navigation becomes a horizontal row of equal icon-and-label choices with (16px) exterior gutters and (64px) minimum navigation targets. The role banner disappears; the signed-in person's name remains in the top-right account control on every screen size. Patients have five choices: Home, Visits, Medicines, Reports and Doctors. Doctors retain their own workspace choices. Preserve content order on phones.
 
 Sections use a (24px–28px) rhythm; related actions use (8px–12px) gaps. Patient and artifact rows use separators instead of individual cards. Report and recording inputs use two columns, collapsing at (760px). Clinical document workspaces retain up to (1200px); existing report review can use its wider document canvas.
 

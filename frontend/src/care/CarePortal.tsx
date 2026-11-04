@@ -933,6 +933,15 @@ export function CarePortal() {
         <PatientChart embedded />
       </CareShell>
     );
+  if (parts[2] === "medicines")
+    return (
+      <CareShell
+        title={text("Medicines", "ওষুধ")}
+        back={{ label: text("Home", "মূল পাতা"), path: "/patient" }}
+      >
+        <CurrentMedicines patientId={user.id} editable />
+      </CareShell>
+    );
   if (parts[2] === "health")
     return (
       <CareShell
@@ -960,14 +969,7 @@ export function CarePortal() {
         </button>
       }
     >
-      <HealthSummary patientId={user.id} compact />
-      <button
-        type="button"
-        className="text-link"
-        onClick={() => navigate("/patient/health")}
-      >
-        {text("My health & medicines", "আমার স্বাস্থ্য ও ওষুধ")} →
-      </button>
+      <HealthSummary patientId={user.id} />
       <VisitsPage home />
       <button
         className="secondary"
