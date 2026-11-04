@@ -6,7 +6,14 @@ import { useRecorder } from "../useRecorder";
 import type { Visit } from "./types";
 import { useApp } from "../store";
 
-export function ReportSubmission({ visit }: { visit: Visit }) {
+export function ReportSubmission({
+  visit,
+  kind = "report",
+}: {
+  visit: Visit;
+  kind?: "report" | "prescription";
+}) {
+  const isPrescription = kind === "prescription";
   const sharedDemo = useApp((state) => state.user?.id === "demo-doctor");
   const recorder = useRecorder();
   const [image, setImage] = useState<File | null>(null);
@@ -31,7 +38,9 @@ export function ReportSubmission({ visit }: { visit: Visit }) {
     const remove = registerNavigationGuard(
       () =>
         submitted.current ||
-        window.confirm("Leave without submitting this report and recording?"),
+        window.confirm(
+          `Leave without submitting this ${isPrescription ? "prescription" : "report"} and recording?`,
+        ),
     );
     const unload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
@@ -82,13 +91,14 @@ export function ReportSubmission({ visit }: { visit: Visit }) {
   return (
     <form className="care-report-form" onSubmit={(event) => void submit(event)}>
       <p className="care-help">
-        The report and voice are saved in this visit and sent to Meta for
-        processing. You’ll check privacy first, then edit the medication table
-        and both language versions before publishing.
+        The {isPrescription ? "prescription" : "report"} and voice are saved
+        in this visit and sent to Meta for processing. You’ll check privacy
+        first, then edit the medication table and both language versions
+        before publishing.
       </p>
       <div className="care-input-pair">
         <section>
-          <h2>Report</h2>
+          <h2>{isPrescription ? "Handwritten prescription" : "Report"}</h2>
           {sharedDemo ? (
             <p className="care-help">
               Shared demo: choose a fictional sample. File upload is
@@ -96,7 +106,9 @@ export function ReportSubmission({ visit }: { visit: Visit }) {
             </p>
           ) : (
             <label>
-              Choose an image
+              {isPrescription
+                ? "Choose a prescription image"
+                : "Choose an image"}
               <input
                 type="file"
                 accept="image/*"
@@ -163,10 +175,12 @@ export function ReportSubmission({ visit }: { visit: Visit }) {
           )}
         </section>
         <section>
-          <h2>Voice explanation</h2>
+          <h2>{isPrescription ? "Read or explain the prescription" : "Voice explanation"}</h2>
           <p className="care-help">
-            Up to 3 minutes. Include medicine names, strengths, doses, timing
-            and duration.
+            Up to 3 minutes. {isPrescription
+              ? "Read each handwritten medicine name and explain any unclear writing. "
+              : ""}
+            Include medicine names, strengths, doses, timing and duration.
           </p>
           <div className="care-actions">
             <button
@@ -256,7 +270,10 @@ export function ReportSubmission({ visit }: { visit: Visit }) {
         >
           {busy ? "Uploading…" : "Check privacy preview"}
         </button>
-        <p className="care-help">Both the report and recording are required.</p>
+        <p className="care-help">
+          Both the image and recording are required. You’ll review the privacy
+          preview before processing.
+        </p>
       </div>
     </form>
   );

@@ -1293,6 +1293,9 @@ html.dark {
 .medicine-reference-panel, .dictation-transcript, .review-issues { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .new-prescription { display: grid; gap: 16px; max-width: 720px; margin-top: 20px; }
 .new-prescription .primary { justify-self: start; }
+.prescription-image-option { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.prescription-image-option h3 { margin: 0; }
+.prescription-image-option p { margin: 6px 0 0; max-width: 56ch; }
 .new-prescription audio, .prescription-audio audio { width: min(100%, 520px); }
 .prescription-workspace { max-width: 1200px; }
 .prescription-draft-fields, .medicine-form-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
@@ -1342,6 +1345,8 @@ html.dark {
 .prescription-publish-bar .draft-status { width: 100%; margin: 0; }
 .prescription-publish-bar .check { max-width: 65ch; }
 @media (max-width: 760px) {
+  .prescription-image-option { align-items: stretch; flex-direction: column; }
+  .prescription-image-option button { width: 100%; }
   .patient-workspace > .patient-navigation { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .patient-workspace > .patient-navigation button { min-width: 0; min-height: 64px; flex-direction: column; justify-content: center; gap: 5px; padding: 8px 4px; font-size: 14px; }
   .prescription-assessment .bilingual-editor { grid-template-columns: minmax(0, 1fr); }

@@ -130,6 +130,30 @@ export function NewPrescription({
           Write manually
         </button>
       </div>
+      {visitId && (
+        <section
+          className="prescription-image-option"
+          aria-labelledby="prescription-image-heading"
+        >
+          <div>
+            <h3 id="prescription-image-heading">Have a handwritten prescription?</h3>
+            <p className="module-help">
+              Upload a photo and add a short voice explanation. We’ll prepare an
+              editable draft for your review.
+            </p>
+          </div>
+          <button
+            className="secondary"
+            type="button"
+            disabled={
+              busy || recorder.recording || recorder.starting || !!recorder.audio
+            }
+            onClick={() => navigate(`/doctor/visits/${visitId}/prescription-image`)}
+          >
+            Upload handwritten prescription
+          </button>
+        </section>
+      )}
       {mode === "voice" ? (
         <>
           <p>

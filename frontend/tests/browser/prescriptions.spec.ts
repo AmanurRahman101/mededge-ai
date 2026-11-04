@@ -299,18 +299,25 @@ test("voice-only prescription: no image, original audio, editable rows and saved
   expect(submissions).toBe(1);
 });
 
-test("report plus voice produces an editable evidence-backed medication table in its visit", async ({
+test("handwritten prescription plus voice produces an editable evidence-backed medication table in its visit", async ({
   page,
   context,
   browser,
 }) => {
   await login(context);
-  await page.goto("/doctor/visits/ui-visit/report");
+  await page.goto("/doctor/visits/ui-visit/prescription");
+  await page
+    .getByRole("button", { name: "Upload handwritten prescription", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Upload handwritten prescription", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Choose a prescription image", { exact: true })).toBeVisible();
   const image = await page.request.get(
     "/api/runs/ui-report/files/redacted.png",
   );
   expect(image.ok()).toBe(true);
-  await page.getByLabel("Choose an image").setInputFiles({
+  await page.getByLabel("Choose a prescription image").setInputFiles({
     name: "fictional.png",
     mimeType: "image/png",
     buffer: await image.body(),

@@ -829,14 +829,23 @@ function VisitDetail({ id }: { id: string }) {
   );
 }
 
-function NewVisitContent({ id, report }: { id: string; report: boolean }) {
+function NewVisitContent({ id, mode }: {
+  id: string;
+  mode: "prescription" | "report" | "prescription-image";
+}) {
   const { data, error, loading, reload } = useResource<Visit>(
     `/api/visits/${id}`,
   );
   const [locked, setLocked] = useState(false);
   return (
     <CareShell
-      title={report ? "Report & voice note" : "New prescription"}
+      title={
+        mode === "report"
+          ? "Report & voice note"
+          : mode === "prescription-image"
+            ? "Upload handwritten prescription"
+            : "New prescription"
+      }
       subtitle={data?.patient_name}
       back={{ label: "Visit", path: `/doctor/visits/${id}` }}
     >
@@ -845,8 +854,11 @@ function NewVisitContent({ id, report }: { id: string; report: boolean }) {
       ) : loading ? (
         <p role="status">Opening visit…</p>
       ) : data?.can_edit ? (
-        report ? (
-          <ReportSubmission visit={data} />
+        mode !== "prescription" ? (
+          <ReportSubmission
+            visit={data}
+            kind={mode === "prescription-image" ? "prescription" : "report"}
+          />
         ) : (
           <NewPrescription
             patientId={data.patient_id}
@@ -881,7 +893,13 @@ export function CarePortal() {
         <NewVisitContent
           key={path}
           id={parts[3]}
-          report={parts[4] === "report"}
+          mode={
+            parts[4] === "report"
+              ? "report"
+              : parts[4] === "prescription-image"
+                ? "prescription-image"
+                : "prescription"
+          }
         />
       ) : (
         <VisitDetail key={path} id={parts[3]} />
