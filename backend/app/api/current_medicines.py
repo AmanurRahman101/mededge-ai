@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
@@ -26,6 +27,12 @@ class MedicineInput(BaseModel):
         if info.field_name == "name" and not value:
             raise ValueError("Enter the medicine name.")
         return value
+
+
+class MedicineEdit(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    instructions: str = Field(default="", max_length=500)
+    expected_confirmed_at: datetime
 
 
 def medicine_json(row):
@@ -116,3 +123,37 @@ def remove_medicine(patient_id: str, medicine_id: str, request: Request):
         session.delete(row)
         session.commit()
     return {"status": "removed"}
+
+
+@router.patch("/patients/{patient_id}/medicines/{medicine_id}")
+def edit_medicine(patient_id: str, medicine_id: str, body: MedicineEdit, request: Request):
+    patient = require_role(request, "patient")
+    if patient.id != patient_id:
+        raise HTTPException(404, "Chart not found.")
+    throttle(request, "current-medicine", patient.id, 30, 60)
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(422, "Enter the medicine name.")
+    with request.app.state.db.session() as session:
+        row = session.get(CurrentMedicine, medicine_id)
+        if row is None or row.patient_id != patient.id:
+            raise HTTPException(404, "Medicine not found.")
+        changed = session.exec(
+            update(CurrentMedicine)
+            .where(
+                CurrentMedicine.id == medicine_id,
+                CurrentMedicine.patient_id == patient.id,
+                CurrentMedicine.confirmed_at == body.expected_confirmed_at,
+            )
+            .values(
+                name=name, instructions=body.instructions.strip(), confirmed_at=datetime.now(UTC)
+            )
+            .returning(CurrentMedicine.id)
+        ).scalar_one_or_none()
+        if changed is None:
+            raise HTTPException(
+                409, "This medicine changed elsewhere. Reload the list before editing."
+            )
+        session.commit()
+        session.refresh(row)
+        return medicine_json(row)

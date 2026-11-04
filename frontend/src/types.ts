@@ -39,6 +39,8 @@ export interface Encounter {
 
 export interface Run {
   run_id: string;
+  input_mode?: string;
+  patient_name?: string;
   status: string;
   pseudonym: string;
   document_type: string | null;
@@ -87,4 +89,12 @@ export interface ClinicalSummary {
   created_at: string;
   published_at: string | null;
   amends_id?: string | null;
+  prescription?: PrescribedMedicine[] | null;
+  revision?: number;
+}
+
+export interface PrescribedMedicine {
+  id: string; name: string; strength: string; form: string;
+  morning: string; noon: string; night: string; other_schedule: string;
+  instructions: string; duration: string; spoken_text: string; confirmed: boolean;
 }

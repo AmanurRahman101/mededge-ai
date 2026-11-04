@@ -17,6 +17,7 @@ class RunRow(SQLModel, table=True):
     pseudonym: str
     owner_id: str | None = Field(default=None, index=True)
     document_type: str | None = None
+    input_mode: str = "image"
     extraction_json: str | None = None
     encounter_json: str | None = None
     bundle_json: str | None = None
@@ -86,6 +87,7 @@ class ClinicalSummary(SQLModel, table=True):
     published_at: datetime | None = None
     amends_id: str | None = Field(default=None, foreign_key="clinicalsummary.id")
     revision: int = Field(default=1, nullable=False)
+    prescription_json: str = ""
 
 
 class ChartDigest(SQLModel, table=True):

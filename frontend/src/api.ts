@@ -74,6 +74,7 @@ export async function listCases(): Promise<SampleCase[]> { return (await request
 export interface Demo { id: string; title: string; kind: string; summary: string; image_url: string; extraction: Extraction; encounter: Encounter; bundle: Record<string, unknown>; replay: boolean }
 export const getDemo = (id: string) => request<Demo>(`/api/demo/${encodeURIComponent(id)}`);
 export const createRun = (form: FormData) => request<{ run_id: string }>("/api/runs", { method: "POST", body: form });
+export const createPrescription = (patientId: string, form: FormData) => request<{ run_id: string }>(`/api/chart/patients/${encodeURIComponent(patientId)}/prescriptions`, { method: "POST", body: form });
 export const getRun = (runId: string) => request<Run>(`/api/runs/${runId}`);
 export const confirmRun = async (runId: string) => { await post(`/api/runs/${runId}/confirm`); };
 export async function approveRun(runId: string, run: Run): Promise<Run["bundle"]> {

@@ -1277,6 +1277,49 @@ html.dark {
 .current-medicine-form { display: grid; gap: 14px; max-width: 560px; margin-top: 16px; }
 .current-medicine-form .action-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .detailed-history-button { margin-top: 8px; }
+.medicine-lookup { margin: 12px 0; min-width: 0; }
+.medicine-search-controls { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+.medicine-search-controls input { flex: 1; min-width: 0; }
+.medicine-search-results { padding: 0; list-style: none; margin: 12px 0; }
+.medicine-search-results li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.medicine-search-results li > div { min-width: 0; overflow-wrap: anywhere; }
+.medicine-search-results p { margin: 4px 0; }
+.medicine-search-results small { color: var(--muted); font-size: 12px; }
+.medicine-search-pagination, .new-prescription .action-group, .prescription-workspace .action-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.medicine-reference-panel, .dictation-transcript, .review-issues { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.new-prescription { display: grid; gap: 16px; max-width: 720px; margin-top: 20px; }
+.new-prescription .primary { justify-self: start; }
+.new-prescription audio, .prescription-audio audio { width: min(100%, 520px); }
+.prescription-workspace { max-width: 1200px; }
+.prescription-workspace > .module-heading { margin-top: 20px; }
+.prescription-audio { margin: 20px 0; }
+.prescription-editor, .prescription-assessment { margin: 24px 0; }
+.prescription-medicine { padding: 20px 0; border-bottom: 1px solid var(--line); }
+.prescription-fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.prescription-fields label { min-width: 0; }
+.prescription-fields .medicine-name, .prescription-fields .medicine-instructions { grid-column: span 2; }
+.prescription-fields .dose-slots { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; grid-column: span 3; }
+.dose-slots legend { font-size: 14px; margin-bottom: 5px; }
+.prescription-medicine > .check { margin-top: 12px; min-height: 44px; }
+.prescription-table { margin: 16px 0; }
+.prescription-table td { vertical-align: top; overflow-wrap: anywhere; white-space: normal; }
+.prescription-table table { min-width: 720px; }
+.review-issues p, .spoken-evidence { white-space: pre-line; }
+@media (max-width: 760px) {
+  .prescription-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .prescription-fields .medicine-name, .prescription-fields .medicine-instructions, .prescription-fields .dose-slots { grid-column: 1 / -1; }
+  .prescription-fields .dose-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .medicine-search-results li { align-items: flex-start; flex-wrap: wrap; }
+  .prescription-medicine .module-heading { gap: 12px; flex-wrap: wrap; }
+}
+@media print {
+  .prescription-audio, .prescription-editor, .prescription-assessment, .dictation-transcript,
+  .review-issues, .prescription-workspace > .module-heading, .prescription-patient, .prescription-workspace .publish-bar,
+  .prescription-workspace .action-group, .prescription-workspace > .banner { display: none !important; }
+  .prescription-table { overflow: visible !important; }
+  .prescription-table table { min-width: 0; width: 100%; table-layout: fixed; font-size: 9pt; }
+  .prescription-table td, .prescription-table th { padding: 6px 4px; }
+}
 .patient-workspace .record-main h3 {
   font-size: 18px;
 }

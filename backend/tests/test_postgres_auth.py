@@ -170,6 +170,40 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
         client.cookies.set("mededge_session", doctor_cookie)
         client.headers["x-csrf-token"] = doctor_csrf
         assert client.get(medicines_path).status_code == 200
+        # Explicit migration and prescription publication on PostgreSQL.
+        created = client.post(
+            f"/api/chart/patients/{patient_id}/prescriptions",
+            data={"mode": "manual", "idempotency_key": uuid.uuid4().hex},
+        )
+        assert created.status_code == 200, created.text
+        rx_id = created.json()["run_id"]
+        assert client.get(f"/api/runs/{rx_id}").json()["input_mode"] == "manual_prescription"
+        summary_path = f"/api/chart/records/{rx_id}/summaries"
+        rx_note = client.get(summary_path).json()["summaries"][0]
+        body = {
+            "transcript": "Fictional manually authored prescription",
+            "summary_en": "Fictional note",
+            "summary_bn": "কাল্পনিক নোট",
+            "expected_revision": 1,
+            "reviewed_both_languages": True,
+            "prescription": [
+                {
+                    "id": "fictional",
+                    "name": "Fictional medicine",
+                    "morning": "½",
+                    "noon": "0",
+                    "night": "",
+                    "duration": "চলবে",
+                    "confirmed": True,
+                }
+            ],
+        }
+        assert (
+            client.post(f"{summary_path}/{rx_note['id']}?publish=true", json=body).status_code
+            == 200
+        )
+        assert client.get(summary_path).json()["summaries"][0]["prescription"][0]["morning"] == "½"
+
         assert client.post(f"/api/chart/connections/{patient_id}/revoke").status_code == 200
         assert client.get(medicines_path).status_code == 404
         assert client.get(path).status_code == 404

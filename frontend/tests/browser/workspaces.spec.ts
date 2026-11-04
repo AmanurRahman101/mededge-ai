@@ -190,6 +190,12 @@ test("patient: manage dropdown closes, summary and record tabs in both themes", 
   await page.reload();
   await expect(page.locator(".health-narrative")).toContainText("No fever reported");
   await expect(page.locator(".current-medicine-list")).toContainText("Fictional medicine 5 mg");
+  await page.getByRole("button",{name:"Edit Fictional medicine 5 mg",exact:true}).click();
+  await page.getByLabel("How you take it").fill("Updated manually by patient");
+  await page.getByRole("button",{name:"Save medicine changes",exact:true}).click();
+  await expect(page.locator(".current-medicine-list")).toContainText("Updated manually by patient");
+  await page.reload();
+  await expect(page.locator(".current-medicine-list")).toContainText("Updated manually by patient");
   page.once("dialog", dialog => dialog.dismiss());
   await page.getByRole("button", { name: "Remove Fictional medicine 5 mg from my list", exact: true }).click();
   await expect(page.locator(".current-medicine-list")).toContainText("Fictional medicine 5 mg");

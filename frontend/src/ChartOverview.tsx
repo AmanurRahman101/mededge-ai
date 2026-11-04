@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChart, post } from "./api";
+import { PrescriptionTable } from "./PrescriptionTable";
+import type { PrescribedMedicine } from "./types";
 import { CurrentMedicines } from "./CurrentMedicines";
 import { navigate } from "./navigation";
 import { PixelPill, PixelFlask, PixelVisit, PixelVitals } from "./PixelIcons";
 
 type Note = {
+  prescription?: PrescribedMedicine[] | null;
   id: string;
   summary_en: string;
   summary_bn: string;
@@ -354,6 +357,7 @@ export function ChartOverview({
                       </span>
                       {source(entry)}
                     </div>
+                    <PrescriptionTable medicines={note.prescription || []} />
                     <p lang={language} className="doctor-summary">
                       {language === "en" ? note.summary_en : note.summary_bn}
                     </p>

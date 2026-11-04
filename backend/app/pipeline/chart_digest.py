@@ -31,6 +31,19 @@ def source_fingerprint(source):
     return hashlib.sha256(("narrative-v2:" + encoded).encode()).hexdigest()
 
 
+def note_source(note):
+    result = {
+        "id": note.id,
+        "record_id": note.run_id,
+        "date": note.published_at.isoformat() if note.published_at else None,
+        "english": note.summary_en,
+        "bangla": note.summary_bn,
+    }
+    if note.prescription_json:
+        result["reviewed_prescription"] = json.loads(note.prescription_json)
+    return result
+
+
 def inputs(db, patient_id):
     with db.session() as session:
         notes = session.exec(
@@ -40,17 +53,7 @@ def inputs(db, patient_id):
             .order_by(ClinicalSummary.published_at, ClinicalSummary.id)
         ).all()
         replaced = {n.amends_id for n in notes if n.amends_id}
-        source = [
-            {
-                "id": n.id,
-                "record_id": n.run_id,
-                "date": n.published_at.isoformat() if n.published_at else None,
-                "english": n.summary_en,
-                "bangla": n.summary_bn,
-            }
-            for n in notes
-            if n.id not in replaced
-        ]
+        source = [note_source(n) for n in notes if n.id not in replaced]
     return source_fingerprint(source), source
 
 

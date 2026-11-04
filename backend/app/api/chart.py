@@ -18,6 +18,7 @@ from sqlmodel import select
 from app import demo
 from app.api.current_medicines import router as medicines_router
 from app.auth.security import client_key, digest, require_role, require_user, throttle
+from app.pipeline.prescription_schema import PrescribedMedicine
 from app.store.db import (
     AuthUser,
     ChartActivity,
@@ -98,6 +99,7 @@ class SummaryUpdate(BaseModel):
     transcript: str = Field(min_length=1, max_length=20000)
     acknowledge_unresolved: bool = False
     reviewed_both_languages: bool = False
+    prescription: list[PrescribedMedicine] | None = Field(default=None, max_length=40)
 
 
 @router.post("/connection-code")
@@ -206,19 +208,13 @@ def connections(request: Request):
                     select(ChartDigest).where(ChartDigest.patient_id.in_(approved_ids))
                 ).all()
                 for digest_row in cached:
+                    from app.pipeline.chart_digest import note_source, source_fingerprint
+
                     source = [
-                        {
-                            "id": n.id,
-                            "record_id": n.run_id,
-                            "date": n.published_at.isoformat() if n.published_at else None,
-                            "english": n.summary_en,
-                            "bangla": n.summary_bn,
-                        }
+                        note_source(n)
                         for n, owner in reversed(notes)
                         if owner == digest_row.patient_id and n.id not in replaced
                     ]
-                    from app.pipeline.chart_digest import source_fingerprint
-
                     fingerprint = source_fingerprint(source)
                     if digest_row.status == "ready" and digest_row.fingerprint == fingerprint:
                         try:
@@ -540,7 +536,9 @@ def patient_overview(
                     "document_type": row.document_type,
                     "created_at": row.created_at.isoformat(),
                     "archived": row.archived,
-                    "source_available": include_source and source_available(request, row.id),
+                    "source_available": include_source
+                    and row.input_mode == "image"
+                    and source_available(request, row.id),
                     "medications": readings("medications", "raw_text"),
                     "tests": readings("advised_tests", "raw_name"),
                     "lab_rows": lab_rows,
@@ -549,6 +547,9 @@ def patient_overview(
                             "id": n.id,
                             "summary_en": n.summary_en,
                             "summary_bn": n.summary_bn,
+                            "prescription": json.loads(n.prescription_json)
+                            if n.prescription_json
+                            else None,
                             "author_name": authors.get(n.author_id, "Doctor"),
                             "published_at": n.published_at.isoformat() if n.published_at else None,
                             "amends_id": n.amends_id,
@@ -631,6 +632,9 @@ def chart_summary(patient_id: str, request: Request):
                             "id": n.id,
                             "summary_en": n.summary_en,
                             "summary_bn": n.summary_bn,
+                            "prescription": json.loads(n.prescription_json)
+                            if n.prescription_json
+                            else None,
                             "author_name": authors.get(n.author_id, "Doctor"),
                             "published_at": n.published_at.isoformat() if n.published_at else None,
                         }
@@ -829,6 +833,9 @@ def summaries(run_id: str, request: Request):
                 {
                     "id": s.id,
                     "revision": s.revision,
+                    "prescription": json.loads(s.prescription_json)
+                    if s.prescription_json
+                    else None,
                     "author_id": s.author_id,
                     "author_name": authors.get(s.author_id, "Doctor"),
                     "amends_id": s.amends_id,
@@ -877,12 +884,32 @@ async def save_summary(
             raise HTTPException(422, "Review both versions of the note before publishing.")
         if publish and summary.unresolved not in ("", "[]") and not body.acknowledge_unresolved:
             raise HTTPException(422, "Review and acknowledge unresolved details.")
+        is_prescription = row.input_mode in {"voice_prescription", "manual_prescription"}
+        if is_prescription and body.prescription is None:
+            raise HTTPException(422, "Include the prescription table when saving this record.")
+        if body.prescription is not None:
+            if not is_prescription:
+                raise HTTPException(
+                    422, "This record does not have an authored prescription table."
+                )
+            ids = [item.id for item in body.prescription]
+            if len(ids) != len(set(ids)):
+                raise HTTPException(422, "Each medicine row must have a unique identifier.")
+            if publish and (
+                not body.prescription
+                or any(not item.name or not item.confirmed for item in body.prescription)
+            ):
+                raise HTTPException(422, "Confirm each medicine name and row before publishing.")
         values = {
             "summary_en": body.summary_en.strip(),
             "summary_bn": body.summary_bn.strip(),
             "transcript": body.transcript.strip(),
             "revision": ClinicalSummary.revision + 1,
         }
+        if body.prescription is not None:
+            values["prescription_json"] = json.dumps(
+                [item.model_dump() for item in body.prescription], ensure_ascii=False
+            )
         if not values["summary_en"] or not values["summary_bn"] or not values["transcript"]:
             raise HTTPException(422, "Both summaries and transcript are required.")
         if publish:
@@ -941,6 +968,15 @@ def amend_summary(run_id: str, summary_id: str, request: Request):
             summary_en=original.summary_en,
             summary_bn=original.summary_bn,
             unresolved="[]",
+            prescription_json=json.dumps(
+                [
+                    {**medicine, "confirmed": False}
+                    for medicine in json.loads(original.prescription_json)
+                ],
+                ensure_ascii=False,
+            )
+            if original.prescription_json
+            else "",
             status="draft",
             created_at=datetime.now(UTC),
             amends_id=original.id,

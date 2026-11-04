@@ -15,7 +15,9 @@ import {
   getSampleDictation,
   post,
 } from "./api";
-import { concatPcm, downsample, wavFromPcm16 } from "./audio";
+import { useRecorder } from "./useRecorder";
+import { MedicineLookup } from "./MedicineLookup";
+import { NewPrescription, PrescriptionWorkspace } from "./PrescriptionWorkspace";
 import { navigate, registerNavigationGuard } from "./navigation";
 import { useApp } from "./store";
 import { prepareImage } from "./image";
@@ -95,133 +97,6 @@ function issues(value: string | string[]): string[] {
   }
 }
 
-function useRecorder() {
-  const [recording, setRecording] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [audio, setAudio] = useState<Blob | null>(null);
-  const [error, setError] = useState("");
-  const gear = useRef<{
-    stream: MediaStream;
-    context: AudioContext;
-    node: AudioWorkletNode;
-    source: MediaStreamAudioSourceNode;
-    sink: GainNode;
-    timer: number;
-  } | null>(null);
-  const alive = useRef(true);
-  const chunks = useRef<Int16Array[]>([]);
-  const samples = useRef(0);
-  const startingRef = useRef(false);
-  const stopRef = useRef<() => void>(() => {});
-  const dispose = useCallback(() => {
-    const current = gear.current;
-    if (!current) return;
-    gear.current = null;
-    window.clearTimeout(current.timer);
-    current.node.port.onmessage = null;
-    current.source.disconnect();
-    current.node.disconnect();
-    current.sink.disconnect();
-    current.stream.getTracks().forEach((track) => track.stop());
-    void current.context.close();
-  }, []);
-  const stop = useCallback(() => {
-    if (!gear.current) return;
-    dispose();
-    setRecording(false);
-    if (samples.current > 0) setAudio(wavFromPcm16(concatPcm(chunks.current)));
-    else {
-      setAudio(null);
-      setError("No audio was captured. Check your microphone and try again.");
-    }
-    chunks.current = [];
-    samples.current = 0;
-  }, [dispose]);
-  stopRef.current = stop;
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-      dispose();
-    };
-  }, [dispose]);
-  async function start() {
-    if (gear.current || startingRef.current) return;
-    startingRef.current = true;
-    setStarting(true);
-    setError("");
-    setAudio(null);
-    chunks.current = [];
-    samples.current = 0;
-    let stream: MediaStream | undefined;
-    let context: AudioContext | undefined;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!alive.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      context = new AudioContext();
-      await context.audioWorklet.addModule("/pcm16-worklet.js");
-      if (!alive.current) {
-        stream.getTracks().forEach((track) => track.stop());
-        void context.close();
-        return;
-      }
-      const source = context.createMediaStreamSource(stream);
-      const node = new AudioWorkletNode(context, "pcm16");
-      const sink = context.createGain();
-      sink.gain.value = 0;
-      source.connect(node);
-      node.connect(sink);
-      sink.connect(context.destination);
-      const rate = context.sampleRate;
-      node.port.onmessage = (message: MessageEvent<Float32Array>) => {
-        const part = downsample(message.data, rate);
-        const remaining = 180 * 24000 - samples.current;
-        if (remaining <= 0) {
-          stopRef.current();
-          return;
-        }
-        const bounded = part.subarray(0, remaining);
-        chunks.current.push(bounded);
-        samples.current += bounded.length;
-        if (samples.current >= 180 * 24000) stopRef.current();
-      };
-      const timer = window.setTimeout(() => stopRef.current(), 180_000);
-      gear.current = { stream, context, node, source, sink, timer };
-      setRecording(true);
-    } catch (caught) {
-      stream?.getTracks().forEach((track) => track.stop());
-      if (context) void context.close();
-      if (alive.current)
-        setError(
-          caught instanceof Error
-            ? `Microphone unavailable: ${caught.message}`
-            : "Microphone unavailable.",
-        );
-    } finally {
-      startingRef.current = false;
-      if (alive.current) setStarting(false);
-    }
-  }
-  return {
-    audio,
-    recording,
-    starting,
-    error,
-    start,
-    stop,
-    discard: () => {
-      setAudio(null);
-      setError("");
-    },
-    useBlob: (blob: Blob) => {
-      setAudio(blob);
-      setError("");
-    },
-  };
-}
 
 export function Doctor({
   initialRunId = null,
@@ -239,6 +114,8 @@ export function Doctor({
   const [patientSearch, setPatientSearch] = useState("");
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [connectionsLoaded, setConnectionsLoaded] = useState(false);
+  const [prescriptionLocked, setPrescriptionLocked] = useState(false);
+  const [submissionMode, setSubmissionMode] = useState<"report" | "prescription">("report");
   const [imagePreparing, setImagePreparing] = useState(false);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [patientId, setPatientId] = useState("");
@@ -630,7 +507,7 @@ export function Doctor({
                     aria-current={
                       patientId === c.patient_id ? "true" : undefined
                     }
-                    disabled={busy || recorder.recording || recorder.starting}
+                    disabled={busy || recorder.recording || recorder.starting || prescriptionLocked}
                     onClick={() => togglePatient(c.patient_id!)}
                   >
                     <PixelWorkspaceIcon workspace="patient" size={28} />
@@ -676,7 +553,7 @@ export function Doctor({
               </div>
             ) : (
               <>
-                <button className="back-link chart-back" type="button" onClick={() => { setPatientId(""); setRecords([]); }}>← All patients</button>
+                <button className="back-link chart-back" type="button" disabled={prescriptionLocked} onClick={() => { setPatientId(""); setRecords([]); }}>← All patients</button>
                 <div className="selected-patient">
                   <div className="workspace-title">
                     <PixelWorkspaceIcon workspace="patient" size={36} />
@@ -688,11 +565,12 @@ export function Doctor({
                     </div>
                   </div>
                 </div>
-                <PatientSwitcher patients={connections} selected={patientId} disabled={busy || recorder.recording || recorder.starting} onChange={togglePatient} />
+                <PatientSwitcher patients={connections} selected={patientId} disabled={busy || recorder.recording || recorder.starting || prescriptionLocked} onChange={togglePatient} />
                 <nav className="module-tabs" aria-label="Patient workspace">
                   <button
                     type="button"
                     aria-current={chartTab === "overview" ? "page" : undefined}
+                    disabled={prescriptionLocked}
                     onClick={() => setChartTab("overview")}
                   >
                     <PixelVisit /> Overview
@@ -700,6 +578,7 @@ export function Doctor({
                   <button
                     type="button"
                     aria-current={chartTab === "history" ? "page" : undefined}
+                    disabled={prescriptionLocked}
                     onClick={() => setChartTab("history")}
                   >
                     <PixelDocument /> Reports & history
@@ -707,6 +586,7 @@ export function Doctor({
                   <button
                     type="button"
                     aria-current={chartTab === "add" ? "page" : undefined}
+                    disabled={prescriptionLocked}
                     onClick={() => setChartTab("add")}
                   >
                     <PixelPill /> Add report & note
@@ -817,6 +697,12 @@ export function Doctor({
                 )}
                 {chartTab === "add" && (
                   <section className="submission-module" key={patientId}>
+                    <div className="segmented" aria-label="What to add">
+                      <button type="button" disabled={prescriptionLocked || recorder.recording || recorder.starting || busy} aria-pressed={submissionMode === "report"} onClick={() => setSubmissionMode("report")}>Report & note</button>
+                      <button type="button" disabled={prescriptionLocked || recorder.recording || recorder.starting || busy} aria-pressed={submissionMode === "prescription"} onClick={() => setSubmissionMode("prescription")}>New prescription</button>
+                    </div>
+                    {submissionMode === "prescription" ? <NewPrescription patientId={patientId} isDemo={isDemo} onLockChange={setPrescriptionLocked} /> : <>
+
                     <h2>Add a report & dictated note</h2>
                     <p className="module-help">
                       The report and recording stay in the patient's chart until
@@ -970,6 +856,7 @@ export function Doctor({
                         </button>
                       </div>
                     </form>
+                    </>}
                   </section>
                 )}
               </>
@@ -979,6 +866,7 @@ export function Doctor({
       </main>
     );
 
+  if (run.input_mode === "voice_prescription" || run.input_mode === "manual_prescription") return <PrescriptionWorkspace run={run} />;
   const ready = ["reviewing", "approved", "exported"].includes(run.status);
   return (
     <main className="workspace record-workspace">
@@ -1173,6 +1061,7 @@ export function Doctor({
       {ready && recordTab === "reading" && (
         <section className="reading-module">
           <h2>Report reading</h2>
+          <details className="medicine-reference-panel"><summary>Look up a Bangladesh medicine</summary><MedicineLookup /></details>
           <p className="module-help">
             Provisional AI extraction. Check it against the image; unclear
             handwriting may be missing.

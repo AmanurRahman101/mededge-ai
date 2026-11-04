@@ -5,6 +5,7 @@ import type { ClinicalSummary, SampleCase } from "./types";
 import { useRun } from "./useRun";
 import { navigate } from "./navigation";
 import { prepareImage } from "./image";
+import { PrescriptionTable } from "./PrescriptionTable";
 import { recordStatus } from "./ChartOverview";
 import {
   PixelDocument,
@@ -18,6 +19,7 @@ export function Patient({
 }: {
   initialRunId?: string | null;
 }) {
+  const patientName = useApp((state) => state.user?.full_name);
   const isDemo = useApp((state) => state.user?.id) === "demo-patient";
   const [runId, setRunId] = useState<string | null>(initialRunId);
   const [tab, setTab] = useState<"notes" | "reading" | "source">("reading");
@@ -418,6 +420,8 @@ export function Patient({
           {published.length ? (
             published.map((note) => (
               <article className="published-note" key={note.id}>
+                {note.prescription?.length ? <p>Patient: {patientName}</p> : null}
+                <PrescriptionTable medicines={note.prescription || []} />
                 <p className="source-caption">
                   {note.author_name || "Doctor"} ·{" "}
                   {new Date(

@@ -11,12 +11,13 @@ from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import update
 
 from app import demo
-from app.api import auth, cases, chart, dev, health, runs, share
+from app.api import auth, cases, chart, dev, health, medicine_reference, prescriptions, runs, share
 from app.auth.security import verify_request
 from app.config import REPO_ROOT, Settings, get_settings
 from app.events import EventBus
 from app.limit import limiter
 from app.models.router import ModelRouter
+from app.pipeline.medicine_reference import MedicineReference
 from app.pipeline.orchestrator import Orchestrator
 from app.store.db import Database, RunRow
 from app.store.object_storage import configured_storage
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI):
     timeout = httpx.Timeout(settings.request_timeout_s, connect=10.0)
     async with httpx.AsyncClient(timeout=timeout) as http:
         app.state.http = http
+        app.state.medicine_reference = MedicineReference(http)
         app.state.router = ModelRouter(settings, http)
         app.state.db = Database(settings)
         app.state.object_storage = configured_storage(settings)
@@ -73,6 +75,7 @@ async def lifespan(app: FastAPI):
         try:
             yield
         finally:
+            await app.state.medicine_reference.close()
             reset_task.cancel()
             pending = list(app.state.tasks) + list(app.state.chart_digest_tasks.values())
             for task in pending:
@@ -118,8 +121,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     return JSONResponse(
                         status_code=409,
                         content={
-                            "detail": ("Your active account changed. "
-                                       "Return to the original account to continue."),
+                            "detail": (
+                                "Your active account changed. "
+                                "Return to the original account to continue."
+                            ),
                             "code": "session_changed",
                         },
                     )
@@ -154,6 +159,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(chart.router)
+    app.include_router(medicine_reference.router)
+    app.include_router(prescriptions.router)
     app.include_router(runs.router)
     app.include_router(cases.router)
     app.include_router(share.router)

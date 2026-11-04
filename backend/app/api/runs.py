@@ -253,13 +253,24 @@ async def get_run(run_id: str, request: Request) -> dict:
     result["source_available"] = (_db(request).runs_dir / run_id / "redacted.png").is_file()
     result["original_available"] = False
     result["audio_available"] = False
+    authored = row.input_mode in {"voice_prescription", "manual_prescription"}
+    if authored:
+        from app.store.db import AuthUser
+
+        with _db(request).session() as session:
+            patient = session.get(AuthUser, row.owner_id)
+            result["patient_name"] = patient.full_name if patient else row.pseudonym
+    if authored and require_user(request).role == "patient":
+        result["transcript"] = None
+    if authored and request.app.state.settings.app_env != "production":
+        result["audio_available"] = (_db(request).runs_dir / run_id / "audio.wav").is_file()
     storage = request.app.state.object_storage
-    if storage:
+    if storage and row.input_mode != "manual_prescription":
         try:
-            result["source_available"] = result["source_available"] or await asyncio.to_thread(
-                storage.exists, run_id, "redacted"
+            result["source_available"] = result["source_available"] or (
+                not authored and await asyncio.to_thread(storage.exists, run_id, "redacted")
             )
-            result["original_available"] = await asyncio.to_thread(
+            result["original_available"] = not authored and await asyncio.to_thread(
                 storage.exists, run_id, "original"
             )
             result["audio_available"] = await asyncio.to_thread(storage.exists, run_id, "audio")
@@ -274,6 +285,17 @@ async def run_file(run_id: str, name: str, request: Request) -> Response:
     if name in private_names:
         _row_or_404(request, run_id)
         storage = request.app.state.object_storage
+        local_audio = _db(request).runs_dir / run_id / "audio.wav"
+        if (
+            name == "audio"
+            and request.app.state.settings.app_env != "production"
+            and local_audio.is_file()
+        ):
+            return Response(
+                local_audio.read_bytes(),
+                media_type="audio/wav",
+                headers={"Cache-Control": "no-store"},
+            )
         if not storage:
             raise HTTPException(404, "File unavailable")
         try:
@@ -328,6 +350,8 @@ async def confirm_run(run_id: str, request: Request) -> dict:
 async def approve_run(run_id: str, body: ApproveBody, request: Request) -> dict:
     doctor = require_role(request, "doctor")
     row = _row_or_404(request, run_id)
+    if row.input_mode != "image":
+        raise HTTPException(409, "Use prescription verification and publication for this record.")
     if not row.extraction_json or not row.encounter_json:
         raise HTTPException(status_code=409, detail="Nothing to approve yet")
     extraction = Extraction.model_validate_json(row.extraction_json)
@@ -466,6 +490,7 @@ def _public(row: RunRow) -> dict:
         "status": row.status,
         "pseudonym": row.pseudonym,
         "document_type": row.document_type,
+        "input_mode": row.input_mode,
         "extraction": json.loads(row.extraction_json) if row.extraction_json else None,
         "encounter": json.loads(row.encounter_json) if row.encounter_json else None,
         "bundle": json.loads(row.bundle_json) if row.bundle_json else None,

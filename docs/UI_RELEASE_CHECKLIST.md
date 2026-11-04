@@ -30,3 +30,14 @@ Validation uses fictional local fixtures and fake providers. CI exercises SQLite
 | 8–10 | Notes, provisional readings and report index live in Detailed history | Deep-link, refresh, return and absence-on-summary checks |
 
 The narrative uses published doctor history and latest amendments, with no second approval. New scans and unreviewed transcripts remain provisional until publication. Narrative results are cached by a versioned fingerprint. List edits and navigation do not repeat paid inference. Medicine-list changes record current use; they do not prescribe starting or stopping treatment.
+
+
+## Medicine reference and prescription authoring — 4 November
+
+- Official public DGHS/OCL product-name search is connected with fixed source filters, authenticated same-origin access, bounded concurrency/timeouts, coalesced caching and honest outage/stale states. No bulk catalogue is bundled or scraped.
+- Patients retain manual medicine entry and now have optimistic edit controls. Registry suggestions are optional and do not prescribe dosing.
+- Consented doctors can create voice-only or manual prescriptions without an image. Voice stages persist the original audio and transcript; explicit retry reuses completed transcription.
+- Medicine rows preserve strengths separately from morning/noon/night amounts, fractions, explicit zeros, custom schedules, instructions and duration. Missing details remain blank. Doctors can add, remove and edit rows.
+- Publication requires row confirmation, bilingual review and an optimistic draft revision. Published prescriptions remain immutable and amendments reset medicine confirmation. Patient records/history/printing and the cached chart narrative include the reviewed table.
+- New routes inherit session/account/CSRF checks and chart consent; pending/revoked doctors cannot create, retry, edit, publish or read protected prescriptions/audio. Real external FHIR export remains disabled.
+- Verification includes SQLite tests, PostgreSQL migration/publication in CI, responsive browser journeys, a rendered bilingual prescription PDF, and a bounded fictional live smoke check after deployment.

@@ -30,6 +30,14 @@ def test_explicit_current_use_is_persistent_idempotent_and_separate_from_old_ocr
     assert response.headers["cache-control"] == "no-store"
     assert len(response.json()["medicines"]) == 1
     assert "Old drug" not in response.text
+    edit = {
+        "name": "Corrected fictional name",
+        "instructions": "As stated by patient",
+        "expected_confirmed_at": saved.json()["confirmed_at"],
+    }
+    assert client.patch(f"{PATH}/{body['id']}", json=edit).status_code == 200
+    assert client.patch(f"{PATH}/{body['id']}", json=edit).status_code == 409
+    assert client.get(PATH).json()["medicines"][0]["name"] == "Corrected fictional name"
     assert client.delete(f"{PATH}/{body['id']}").status_code == 200
     assert client.get(PATH).json() == {"medicines": []}
 
@@ -54,6 +62,13 @@ def test_doctor_reads_only_with_active_consent_and_cannot_change_patients_list(r
     assert client.get(PATH).status_code == (200 if status == "approved" else 404)
     assert client.post(PATH, json=body).status_code == 403
     assert client.delete(f"{PATH}/{body['id']}").status_code == 403
+    assert (
+        client.patch(
+            f"{PATH}/{body['id']}",
+            json={"name": "Other", "expected_confirmed_at": datetime.now(UTC).isoformat()},
+        ).status_code
+        == 403
+    )
     sign_in(client, "patient2")
     assert client.get(PATH).status_code == 404
     assert client.post(PATH, json=body).status_code == 404

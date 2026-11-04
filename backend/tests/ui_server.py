@@ -13,6 +13,7 @@ from app.auth.security import digest
 from app.config import Settings
 from app.main import create_app
 from app.pipeline.chart_digest import DigestItem, DigestResult
+from app.pipeline.prescription_schema import PrescribedMedicine, PrescriptionDraft
 from app.store.db import AuthSession, AuthUser, ChartConnection, ClinicalSummary, Database, RunRow
 
 root = (Path(__file__).resolve().parents[1] / "var" / f"ui-{uuid.uuid4().hex}").resolve()
@@ -151,7 +152,57 @@ original_lifespan = app.router.lifespan_context
 async def fixture_lifespan(app):
     async with original_lifespan(app):
 
+        async def fake_asr(*args, **kwargs):
+            return {
+                "transcript": ("Fictional medicine five mg, half in the morning, "
+                               "zero at noon, one at night, continue.")
+            }
+
+        from app.api import prescriptions
+
+        prescriptions.transcribe_wav = fake_asr
+
+        async def fake_search(query, page=1):
+            return {
+                "products": [
+                    {
+                        "code": "fictional-product",
+                        "brand": "Fictional reference brand",
+                        "composition": "Fictional ingredient 5 mg",
+                        "form": "Tablet",
+                        "manufacturer": "Fictional manufacturer",
+                        "dar_number": "fixture",
+                        "source_version": "test",
+                        "source_url": "https://example.test/registry",
+                    }
+                ],
+                "total": 1,
+                "page": page,
+                "has_more": False,
+                "checked_at": "2026-11-04T00:00:00Z",
+                "stale": False,
+            }
+
+        app.state.medicine_reference.search = fake_search
+
         async def fake_provider(*args, **kwargs):
+            if kwargs["schema"] == PrescriptionDraft:
+                return SimpleNamespace(
+                    value=PrescriptionDraft(
+                        medicines=[
+                            PrescribedMedicine(
+                                name="Fictional medicine",
+                                strength="5 mg",
+                                morning="½",
+                                noon="0",
+                                night="1",
+                                duration="Continue",
+                            )
+                        ],
+                        summary_en="Fictional doctor assessment.",
+                        summary_bn="কাল্পনিক মূল্যায়ন।",
+                    )
+                )
             notes = json.loads(kwargs["parts"][0].text)
             return SimpleNamespace(
                 value=DigestResult(
