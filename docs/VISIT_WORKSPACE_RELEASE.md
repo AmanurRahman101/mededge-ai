@@ -17,13 +17,15 @@ The supplied pixel identity, Geist, zinc themes and footer are retained.
 
 ## Validation
 
-Local checks: backend **128 passed**, isolated PostgreSQL test skipped locally; frontend build and result rendering passed; **24 browser journeys passed**. Release CI additionally runs migrations, concurrent visit starts, publication, revocation and cleanup against PostgreSQL 16 before the deployment branch is advanced.
+Local checks: backend **128 passed**, isolated PostgreSQL test skipped locally; frontend build and result rendering passed; **25 browser journeys** cover this release. Release CI additionally runs migrations, concurrent visit starts, publication, revocation and cleanup against PostgreSQL 16 before the deployment branch is advanced. The initial release passed **129 backend tests** including PostgreSQL and **24 browser journeys**; the follow-up adds a regression for the shared-demo upload restriction.
 
 Browser coverage includes 320, 375, 390, 768, 1280, 1440 and 1920px in both themes; actual control bounds; keyboard/menu dismissal; account changes; draft conflicts; patient/doctor navigation; manual and voice-only prescriptions; combined report/voice → privacy review → correction → save/reopen → publication → patient readback; visit completion; bilingual print contrast.
 
 New backend regressions cover two patients/two doctors, private open visits, completed read-only sharing, revoked access, patient ownership, retained legacy records, idempotency, completion blockers and safe discard. Provider fixtures use fictional evidence. PostgreSQL cleanup includes referenced records and stale demo visits.
 
 Visual review found and corrected a source/editor alignment defect; the regression checks their actual vertical alignment, not only visibility. The design detector returned no findings for the new care module. Screenshots initially labelled as patient visits were recaptured on the correct Visits surface before final review.
+
+Live checks on the initial release passed using a fictional saved prescription and sample dictation: Meta processing, medication correction, draft reopen, publication, patient table readback, visit completion and matching original-image/audio hashes for both roles. Shared demo accounts intentionally reject uploaded images; the follow-up hides that unavailable input and directs shared-demo users to fictional sample reports. Ordinary verified accounts retain image upload.
 
 ## Evidence
 

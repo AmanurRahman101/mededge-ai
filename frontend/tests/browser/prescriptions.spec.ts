@@ -57,6 +57,56 @@ async function bounds(page: Page) {
   expect(clipped).toEqual([]);
 }
 
+test("shared demo report entry offers fictional sources instead of a forbidden file upload", async ({
+  page,
+}) => {
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({
+      json: {
+        user: {
+          id: "demo-doctor",
+          role: "doctor",
+          full_name: "Demo Doctor",
+          email: "fictional@example.test",
+          verified: true,
+        },
+        csrf_token: "fictional",
+      },
+    }),
+  );
+  await page.route("**/api/visits/demo-visit", (route) =>
+    route.fulfill({
+      json: {
+        id: "demo-visit",
+        patient_id: "demo-patient",
+        patient_name: "Demo Patient",
+        doctor_id: "demo-doctor",
+        can_edit: true,
+        status: "open",
+        records: [],
+      },
+    }),
+  );
+  await page.goto("/doctor/visits/demo-visit/report");
+  await expect(page.getByLabel("Choose an image")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", {
+      name: "Choose a fictional sample report",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Shared demo: choose a fictional sample. File upload is unavailable.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.screenshot({
+    path: "../scripts/out/ui/shared-demo-report.png",
+    fullPage: true,
+  });
+});
+
 test("manual prescription: registry lookup, editing, publication, patient view and print", async ({
   page,
   context,

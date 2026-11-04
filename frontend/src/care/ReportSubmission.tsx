@@ -4,8 +4,10 @@ import { prepareImage } from "../image";
 import { navigate, registerNavigationGuard } from "../navigation";
 import { useRecorder } from "../useRecorder";
 import type { Visit } from "./types";
+import { useApp } from "../store";
 
 export function ReportSubmission({ visit }: { visit: Visit }) {
+  const sharedDemo = useApp((state) => state.user?.id === "demo-doctor");
   const recorder = useRecorder();
   const [image, setImage] = useState<File | null>(null);
   const [savedReport, setSavedReport] = useState("");
@@ -87,27 +89,34 @@ export function ReportSubmission({ visit }: { visit: Visit }) {
       <div className="care-input-pair">
         <section>
           <h2>Report</h2>
-          <label>
-            Choose an image
-            <input
-              type="file"
-              accept="image/*"
-              disabled={busy || preparing}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) return;
-                key.current = crypto.randomUUID();
-                setImage(null);
-                setSavedReport("");
-                setPreparing(true);
-                setError("");
-                void prepareImage(file)
-                  .then(setImage)
-                  .catch((error) => setError(error.message))
-                  .finally(() => setPreparing(false));
-              }}
-            />
-          </label>
+          {sharedDemo ? (
+            <p className="care-help">
+              Shared demo: choose a fictional sample. File upload is
+              unavailable.
+            </p>
+          ) : (
+            <label>
+              Choose an image
+              <input
+                type="file"
+                accept="image/*"
+                disabled={busy || preparing}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  key.current = crypto.randomUUID();
+                  setImage(null);
+                  setSavedReport("");
+                  setPreparing(true);
+                  setError("");
+                  void prepareImage(file)
+                    .then(setImage)
+                    .catch((error) => setError(error.message))
+                    .finally(() => setPreparing(false));
+                }}
+              />
+            </label>
+          )}
           {preparing && <p role="status">Preparing image…</p>}
           {image && <p>{image.name}</p>}
           <button
@@ -127,7 +136,9 @@ export function ReportSubmission({ visit }: { visit: Visit }) {
                 .catch((error) => setError(error.message));
             }}
           >
-            Use a saved report instead
+            {sharedDemo
+              ? "Choose a fictional sample report"
+              : "Use a saved report instead"}
           </button>
           {reports && (
             <label>
