@@ -117,6 +117,7 @@ test("saved prescription loading and failure never masquerade as an empty prescr
   await page.route("**/api/runs/loading-prescription", route => route.fulfill({ json: { run_id: "loading-prescription", patient_id: "ui-patient", patient_name: "Nadia (fictional)", input_mode: "manual_prescription", status: "reviewing", trace: [] } }));
   await page.goto("/doctor/records/loading-prescription");
   await expect(page.getByText("Loading the saved prescription…", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Prescription", exact: true })).toBeFocused();
   await expect(page.getByText("The author has not published this prescription yet.")).toHaveCount(0);
   release();
   await expect(page.getByRole("button", { name: "Try loading again" })).toBeVisible();

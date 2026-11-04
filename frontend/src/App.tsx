@@ -117,7 +117,19 @@ export function App() {
     return () => cancelAnimationFrame(frame);
   }, [locationKey, checking, connectionError]);
   useEffect(() => {
-    const updateTitle = () => { const heading = document.querySelector("main h1"); if (heading) document.title = `${heading.textContent} · MedEdge AI`; };
+    let previousHeading = document.querySelector<HTMLElement>("main h1");
+    const updateTitle = () => {
+      const heading = document.querySelector<HTMLElement>("main h1");
+      if (!heading) return;
+      document.title = `${heading.textContent} · MedEdge AI`;
+      // An async record replaces its loading heading. Restore focus only if
+      // it fell back to body; never interrupt a control the user selected.
+      if (previousHeading && !previousHeading.isConnected && document.activeElement === document.body) {
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+      }
+      previousHeading = heading;
+    };
     const observer = new MutationObserver(updateTitle);
     const root = document.getElementById("root");
     if (root) observer.observe(root, { childList: true, subtree: true, characterData: true });
