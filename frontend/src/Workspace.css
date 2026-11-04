@@ -1319,7 +1319,10 @@ html.dark {
   .review-issues, .prescription-workspace > .module-heading, .prescription-patient, .prescription-workspace .publish-bar,
   .prescription-workspace .action-group, .prescription-workspace > .banner { display: none !important; }
   .prescription-table { overflow: visible !important; }
-  .prescription-table table { min-width: 0; width: 100%; table-layout: fixed; font-size: 9pt; }
+  .prescription-table table {
+    min-width: 0; width: 100%; table-layout: fixed; font-size: 9pt;
+    font-family: Arial, sans-serif; font-variant-numeric: normal; font-feature-settings: normal;
+  }
   .prescription-table td, .prescription-table th {
     padding: 6px 4px; font-size: 9pt; line-height: 1.45;
     white-space: normal; overflow-wrap: anywhere; vertical-align: top;
