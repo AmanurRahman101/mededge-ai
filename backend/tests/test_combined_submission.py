@@ -71,13 +71,18 @@ def test_combined_submission_requires_approval_and_is_idempotent(request, monkey
     assert client.post("/api/runs", data=data, files=changed).status_code == 409
 
 
-def test_combined_submission_requires_audio_and_valid_pcm(request, monkeypatch):
+def test_image_only_submission_and_valid_optional_pcm(request, monkeypatch):
     client = request.getfixturevalue("access_client")
     sign_in(client, "doctor")
     approved(client)
     data = {"patient_id": "patient1", "idempotency_key": "stable-2"}
     image = ("report.png", b"image", "image/png")
-    assert client.post("/api/runs", data=data, files={"image": image}).status_code == 422
+    async def capture(ctx):
+        pass
+
+    monkeypatch.setattr(client.app.state.orchestrator, "execute", capture)
+    assert client.post("/api/runs", data=data, files={"image": image}).status_code == 200
+    data["idempotency_key"] = "stable-invalid-audio"
     assert (
         client.post(
             "/api/runs",
@@ -125,9 +130,9 @@ def test_public_export_is_disabled(request):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("revoke_during_voice", [False, True])
+@pytest.mark.parametrize("with_audio,revoke_during_voice", [(True, False), (True, True), (False, False)])
 async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocation(
-    request, monkeypatch, revoke_during_voice
+    request, monkeypatch, with_audio, revoke_during_voice
 ):
     client = request.getfixturevalue("access_client")
     approved(client)
@@ -193,7 +198,7 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
     monkeypatch.setattr(orchestrator.router, "structured", fake_structured)
     image = io.BytesIO()
     Image.new("RGB", (100, 100), "white").save(image, format="PNG")
-    ctx = RunContext("combo", image.getvalue(), recording(), None, True, False, "image/png")
+    ctx = RunContext("combo", image.getvalue(), recording() if with_audio else None, None, True, False, "image/png")
     await orchestrator.execute(ctx)
     with db.session() as session:
         drafts = session.exec(
@@ -205,19 +210,20 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
         else:
             assert len(seen) == 1
             assert any(isinstance(part, ImagePart) for part in seen[0])
-            assert any(
-                isinstance(part, TextPart) and "fasting specimen" in part.text for part in seen[0]
-            )
+            assert any(isinstance(part, TextPart) and
+                ("fasting specimen" if with_audio else "No voice recording") in part.text
+                for part in seen[0])
             assert len(drafts) == 1 and drafts[0].status == "draft"
             assert drafts[0].summary_bn and drafts[0].summary_en
             table = json.loads(drafts[0].prescription_json)
             assert table[0]["confirmed"] is False
             assert table[0]["morning"] == "½" and table[0]["noon"] == "0"
-            assert table[0]["image_text"] and table[0]["spoken_text"]
+            assert table[0]["image_text"]
+            assert bool(table[0]["spoken_text"]) == with_audio
             assert table[0]["conflicts"] and table[0]["duration"] == "চলবে"
             assert db.get("combo").status == "reviewing"
             messages = [event.message for event in bus.history("combo")]
-            assert "Transcribing the doctor's recording" in messages
+            assert ("Transcribing the doctor's recording" in messages) == with_audio
             assert "Reading the report and translating the dictation" in messages
             assert "Draft ready for doctor review" in messages
     assert ctx.audio is None and ctx.image == b""

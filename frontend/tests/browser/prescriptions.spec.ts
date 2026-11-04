@@ -410,3 +410,36 @@ test("handwritten prescription plus voice produces an editable evidence-backed m
     await patient.close();
   }
 });
+
+for (const source of ["image", "voice"] as const) {
+  test(`prescription accepts ${source} alone`, async ({ page, context }) => {
+    await login(context);
+    await page.goto("/doctor/visits/ui-visit/prescription-image");
+    const privacy = page.getByRole("button", { name: "Check privacy preview", exact: true });
+    await expect(page.getByRole("button", { name: "Create prescription draft", exact: true })).toBeDisabled();
+    if (source === "image") {
+      const image = await page.request.get("/api/runs/ui-report/files/redacted.png");
+      await page.getByLabel("Choose a prescription image").setInputFiles({
+        name: "fictional.png", mimeType: "image/png", buffer: await image.body(),
+      });
+      await expect(privacy).toBeEnabled();
+      await privacy.click();
+      await page.getByRole("button", { name: "Confirm privacy & continue", exact: true }).click();
+    } else {
+      await page.getByText("Use a recording file", { exact: true }).click();
+      await page.getByLabel("WAV recording", { exact: true }).setInputFiles({
+        name: "fictional.wav", mimeType: "audio/wav", buffer: wav(),
+      });
+      await page.getByRole("button", { name: "Create prescription draft", exact: true }).click();
+    }
+    await expect(page.getByRole("article", { name: "Medicine 1", exact: true })).toBeVisible();
+    if (source === "image") {
+      await page.getByRole("article", { name: "Medicine 1", exact: true }).getByRole("checkbox").check();
+      await page.getByRole("button", { name: "Save draft", exact: true }).click();
+      await expect(page.getByText("Prescription draft saved.", { exact: true })).toBeVisible();
+      await page.getByRole("checkbox", { name: /I checked every medicine/ }).check();
+      await page.getByRole("button", { name: "Verify and publish prescription", exact: true }).click();
+      await expect(page.locator(".published-note .prescription-table")).toContainText("Fictional medicine");
+    }
+  });
+}

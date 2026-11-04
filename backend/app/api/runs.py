@@ -84,8 +84,8 @@ async def create_run(
     if user.role == "doctor" and not case_id:
         if not patient_id or not active_connection(_db(request), patient_id, user.id):
             raise HTTPException(404, "Patient chart not found.")
-        if audio is None or (image is None and not source_run_id) or not idempotency_key:
-            raise HTTPException(422, "A report, voice recording, and submission key are required.")
+        if (image is None and not source_run_id) or not idempotency_key:
+            raise HTTPException(422, "An image and submission key are required.")
         if len(idempotency_key) > 128:
             raise HTTPException(422, "Invalid submission key.")
     elif user.role != "doctor" and audio is not None:
@@ -141,7 +141,7 @@ async def create_run(
         raise HTTPException(status_code=400, detail="Upload a report or choose a sample case")
 
     audio_bytes = await audio.read(MAX_AUDIO_BYTES + 1) if audio is not None else None
-    if user.role == "doctor" and not case_id:
+    if user.role == "doctor" and not case_id and audio is not None:
         if not audio_bytes or len(audio_bytes) > MAX_AUDIO_BYTES:
             raise HTTPException(422, "Recording must be at most 9 MB.")
         try:
@@ -167,7 +167,7 @@ async def create_run(
             (patient_id + (visit_id or "")).encode()
             + b"\0"
             + hashlib.sha256(image_bytes).digest()
-            + hashlib.sha256(audio_bytes).digest()
+            + hashlib.sha256(audio_bytes or b"").digest()
         ).hexdigest()
         with db.session() as session:
             previous = session.exec(

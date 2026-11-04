@@ -105,7 +105,7 @@ class SummaryUpdate(BaseModel):
     expected_revision: int = Field(ge=1)
     summary_en: str = Field(min_length=1, max_length=12000)
     summary_bn: str = Field(min_length=1, max_length=12000)
-    transcript: str = Field(min_length=1, max_length=20000)
+    transcript: str = Field(max_length=20000)
     acknowledge_unresolved: bool = False
     reviewed_both_languages: bool = False
     prescription: list[PrescribedMedicine] | None = Field(default=None, max_length=40)
@@ -958,8 +958,8 @@ async def save_summary(
             values["prescription_json"] = json.dumps(
                 [item.model_dump() for item in body.prescription], ensure_ascii=False
             )
-        if not values["summary_en"] or not values["summary_bn"] or not values["transcript"]:
-            raise HTTPException(422, "Both summaries and transcript are required.")
+        if not values["summary_en"] or not values["summary_bn"] or (row.input_mode != "image" and not values["transcript"]):
+            raise HTTPException(422, "Both summaries and any required transcript are required.")
         if publish:
             values.update(status="published", published_at=datetime.now(UTC))
         changed = session.exec(

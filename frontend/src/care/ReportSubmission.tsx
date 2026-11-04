@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { createRun, getChart, getSampleDictation } from "../api";
+import { createPrescription, createRun, getChart, getSampleDictation } from "../api";
 import { prepareImage } from "../image";
 import { navigate, registerNavigationGuard } from "../navigation";
 import { useRecorder } from "../useRecorder";
@@ -63,18 +63,22 @@ export function ReportSubmission({
   }, [recorder.audio]);
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!recorder.audio || (!image && !savedReport)) return;
+    const hasImage = !!(image || savedReport);
+    if (isPrescription ? (!recorder.audio && !hasImage) : (!recorder.audio || !hasImage)) return;
     setBusy(true);
     setError("");
     const form = new FormData();
     form.append("patient_id", visit.patient_id);
     form.append("visit_id", visit.id);
     form.append("idempotency_key", key.current);
-    form.append("audio", recorder.audio, "visit.wav");
+    if (recorder.audio) form.append("audio", recorder.audio, "visit.wav");
     if (image) form.append("image", image);
     else form.append("source_run_id", savedReport);
     try {
-      const result = await createRun(form);
+      if (isPrescription && !hasImage) form.append("mode", "voice");
+      const result = isPrescription && !hasImage
+        ? await createPrescription(visit.patient_id, form)
+        : await createRun(form);
       submitted.current = true;
       recorder.discard();
       navigate(`/doctor/records/${result.run_id}`);
@@ -91,10 +95,10 @@ export function ReportSubmission({
   return (
     <form className="care-report-form" onSubmit={(event) => void submit(event)}>
       <p className="care-help">
-        The {isPrescription ? "prescription" : "report"} and voice are saved
-        in this visit and sent to Meta for processing. You’ll check privacy
-        first, then edit the medication table and both language versions
-        before publishing.
+        Your {isPrescription ? "prescription sources are" : "report and voice are"} saved
+        in this visit and sent to Meta for processing. Review image privacy
+        before processing, then edit the medication table and both language
+        versions before publishing.
       </p>
       <div className="care-input-pair">
         <section>
@@ -264,15 +268,17 @@ export function ReportSubmission({
             preparing ||
             recorder.recording ||
             recorder.starting ||
-            !recorder.audio ||
-            (!image && !savedReport)
+            (isPrescription
+              ? (!recorder.audio && !image && !savedReport)
+              : (!recorder.audio || (!image && !savedReport)))
           }
         >
-          {busy ? "Uploading…" : "Check privacy preview"}
+          {busy ? "Uploading…" : isPrescription && !image && !savedReport ? "Create prescription draft" : "Check privacy preview"}
         </button>
         <p className="care-help">
-          Both the image and recording are required. You’ll review the privacy
-          preview before processing.
+          {isPrescription
+            ? "Add an image, a voice recording, or both. Images have a privacy preview."
+            : "Both the image and recording are required. You’ll review the privacy preview before processing."}
         </p>
       </div>
     </form>

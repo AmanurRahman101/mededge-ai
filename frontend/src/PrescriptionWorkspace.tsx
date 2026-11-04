@@ -138,7 +138,7 @@ export function NewPrescription({
           <div>
             <h3 id="prescription-image-heading">Have a handwritten prescription?</h3>
             <p className="module-help">
-              Upload a photo and add a short voice explanation. We’ll prepare an
+              Upload a photo, add a voice explanation, or use both. We’ll prepare an
               editable draft for your review.
             </p>
           </div>
@@ -393,7 +393,7 @@ export function PrescriptionWorkspace({ run: initial }: { run: Run }) {
           text: `${m.name.trim() || "Unnamed medicine"}: check name, strength and instructions`,
           target: `medicine-${m.id}`,
         })),
-        ...(!draft.transcript.trim()
+        ...(!draft.transcript.trim() && !(run.input_mode === "image" && !run.audio_available)
           ? [
               {
                 text: "Enter the doctor’s note",
@@ -721,7 +721,7 @@ export function PrescriptionWorkspace({ run: initial }: { run: Run }) {
                     ) ||
                     !draft.summary_en.trim() ||
                     !draft.summary_bn.trim() ||
-                    !draft.transcript.trim()
+                    (!draft.transcript.trim() && !(run.input_mode === "image" && !run.audio_available))
                   }
                   onClick={() => void save(true)}
                 >

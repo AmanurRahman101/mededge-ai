@@ -299,19 +299,21 @@ class Orchestrator:
         self.bus.publish(run_id, Stage.REDACT, EventKind.COMPLETED, "Redaction confirmed")
 
         row = self.db.get(run_id)
-        if row and row.submitted_by and row.owner_id != row.submitted_by and ctx.audio:
+        if row and row.submitted_by and row.owner_id != row.submitted_by:
             self._check_consent(ctx)
-            self.bus.publish(
-                run_id, Stage.TRANSCRIBE, EventKind.STARTED, "Transcribing the doctor's recording"
-            )
-            voice = await transcribe_wav(self.http, self.settings, ctx.audio)
-            ctx.audio = None
-            self.db.add_spend(VOICE_USD)
-            transcript = str(voice.get("transcript") or "").strip()
-            if not transcript:
-                raise ValueError("No speech detected; submit the recording again.")
-            self._check_consent(ctx)
-            self.bus.publish(run_id, Stage.TRANSCRIBE, EventKind.COMPLETED, "Recording transcribed")
+            transcript = ""
+            if ctx.audio:
+                self.bus.publish(
+                    run_id, Stage.TRANSCRIBE, EventKind.STARTED, "Transcribing the doctor's recording"
+                )
+                voice = await transcribe_wav(self.http, self.settings, ctx.audio)
+                ctx.audio = None
+                self.db.add_spend(VOICE_USD)
+                transcript = str(voice.get("transcript") or "").strip()
+                if not transcript:
+                    raise ValueError("No speech detected; submit the recording again.")
+                self._check_consent(ctx)
+                self.bus.publish(run_id, Stage.TRANSCRIBE, EventKind.COMPLETED, "Recording transcribed")
             self.bus.publish(
                 run_id,
                 Stage.EXTRACT,
@@ -323,7 +325,7 @@ class Orchestrator:
                 "extractor",
                 instructions=DICTATION_INSTRUCTIONS,
                 parts=[
-                    TextPart("Doctor transcript: " + transcript),
+                    TextPart("Doctor transcript: " + transcript if transcript else "No voice recording was provided. Read the image only; do not invent spoken evidence."),
                     ImagePart(result.redacted_png, "image/png"),
                 ],
                 schema=ConsultationDraft,
@@ -374,13 +376,11 @@ class Orchestrator:
                         unresolved=json.dumps(combined.value.unresolved),
                         prescription_json=json.dumps(
                             [
-                                m.model_copy(update={"confirmed": False}).model_dump()
+                                m.model_copy(update={"confirmed": False, **({"spoken_text": ""} if not transcript else {})}).model_dump()
                                 for m in combined.value.medicines
                             ],
                             ensure_ascii=False,
-                        )
-                        if combined.value.medicines
-                        else "",
+                        ),
                         created_at=datetime.now(UTC),
                     )
                 )
