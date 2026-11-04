@@ -1320,7 +1320,16 @@ html.dark {
   .prescription-workspace .action-group, .prescription-workspace > .banner { display: none !important; }
   .prescription-table { overflow: visible !important; }
   .prescription-table table { min-width: 0; width: 100%; table-layout: fixed; font-size: 9pt; }
-  .prescription-table td, .prescription-table th { padding: 6px 4px; }
+  .prescription-table td, .prescription-table th {
+    padding: 6px 4px; font-size: 9pt; line-height: 1.45;
+    white-space: normal; overflow-wrap: anywhere; vertical-align: top;
+  }
+  .prescription-table th:nth-child(1) { width: 24%; }
+  .prescription-table th:nth-child(2) { width: 12%; }
+  .prescription-table th:nth-child(3), .prescription-table th:nth-child(4), .prescription-table th:nth-child(5) { width: 9%; }
+  .prescription-table th:nth-child(6) { width: 23%; }
+  .prescription-table th:nth-child(7) { width: 14%; }
+  .prescription-table tr { break-inside: avoid; }
 }
 .patient-workspace .record-main h3 {
   font-size: 18px;

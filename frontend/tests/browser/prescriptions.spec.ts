@@ -67,8 +67,20 @@ test("manual prescription: registry lookup, editing, publication, patient view a
   await page.getByRole("button", {name:"Verify and publish prescription",exact:true}).click();
   await expect(page.getByRole("heading", {name:"Published prescription",exact:true})).toBeVisible();
   await expect(page.locator(".prescription-table")).toContainText("চলবে");
+  await page.setViewportSize({width:794,height:1123});
   await page.emulateMedia({media:"print"});
-  await page.pdf({path:"../scripts/out/ui/prescription-print.pdf",printBackground:true});
+  await page.evaluate(()=>document.fonts.ready);
+  const overflow = await page.locator(".prescription-table th, .prescription-table td").evaluateAll(cells=>cells.filter(cell=>{
+    const box=cell.getBoundingClientRect();
+    const walker=document.createTreeWalker(cell,NodeFilter.SHOW_TEXT);
+    while(walker.nextNode()){
+      const range=document.createRange(); range.selectNodeContents(walker.currentNode);
+      if([...range.getClientRects()].some(rect=>rect.left < box.left-1 || rect.right > box.right+1)) return true;
+    }
+    return false;
+  }).map(cell=>cell.textContent));
+  expect(overflow).toEqual([]);
+  await page.pdf({path:"../scripts/out/ui/prescription-print.pdf",printBackground:true,format:"A4"});
   await expect(page.locator(".prescription-audio")).toHaveCount(0);
   await expect(page.locator(".prescription-editor")).toHaveCount(0);
   await page.emulateMedia({media:"screen"});

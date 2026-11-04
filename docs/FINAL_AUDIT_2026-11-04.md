@@ -14,6 +14,7 @@ This audit covers the implemented patient/doctor demo, not clinical validation o
 | Session checks made two bootstrap requests and called every failure an account change | One account-bound bootstrap, distinct expired/offline/changed states and explicit retry | Browser regression restores the original draft with one recovery request |
 | A hidden stale tab could continue microphone capture | Stop capture when session pauses, including a pending microphone setup; retain captured audio in memory | Browser test with Chromium's fictional microphone |
 | Mobile account icon lacked an accessible name | Persistent accessible Account label | axe checks at 320/1440px, both themes |
+| CI PDF showed crowded bilingual medication headings | Explicit print typography, wrapping and weighted column widths | A4 text-range bounds check and rendered PDF inspection |
 | Demo cleanup omitted grant dependencies, cached summaries, old current medicines and private files | Delete dependencies before records, invalidate the demo digest, retry failed private-file deletion, restrict cleanup to demo ownership | SQLite foreign-key-on and storage-failure tests; PostgreSQL integration in CI |
 | Cleanup errors could prevent startup | Seed before readiness; perform cleanup in the existing guarded maintenance loop | Startup/seed/restart tests |
 | Protected chart query links were lost through sign-in | Preserve validated role-specific query URLs | Source/route regression checks |
