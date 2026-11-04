@@ -338,19 +338,6 @@ class Orchestrator:
                 item for item in extraction.medications if not item.contains_identifier
             ]
             encounter = await self._structure(run_id, transcript)
-            bundle, used_fallback, report, _ = await self._build_bundle(
-                run_id, extraction, encounter, row.pseudonym, ctx.inject_fault
-            )
-            if not report.ok and encounter.note:
-                # A dictated note that trips the policy check must not block the bundle.
-                encounter = EncounterFields(
-                    status=encounter.status,
-                    class_code=encounter.class_code,
-                    class_display=encounter.class_display,
-                )
-                bundle, codes, units = await self._fallback(extraction, encounter, row.pseudonym)
-                used_fallback = True
-                report = verify(bundle, extraction, codes, units)
             with self.db.session() as session:
                 from sqlmodel import select
 
@@ -387,8 +374,8 @@ class Orchestrator:
                 current.extraction_json = extraction.model_dump_json()
                 current.document_type = extraction.document_type
                 current.encounter_json = encounter.model_dump_json()
-                current.bundle_json = json.dumps(bundle) if report.ok else None
-                current.used_fallback = used_fallback
+                current.bundle_json = None
+                current.used_fallback = False
                 current.inject_fault = ctx.inject_fault
                 current.extractor_model = str(combined.target)
                 current.status = "reviewing"
@@ -435,19 +422,16 @@ class Orchestrator:
         )
 
         encounter, transcript = await self._encounter(run_id, ctx.audio)
-        bundle, used_fallback, report, _ = await self._build_bundle(
-            run_id, extraction, encounter, anon, ctx.inject_fault
-        )
         self.db.update(
             run_id,
             status="reviewing",
             document_type=extraction.document_type,
             extraction_json=extraction.model_dump_json(),
             encounter_json=encounter.model_dump_json(),
-            bundle_json=json.dumps(bundle),
+            bundle_json=None,
             transcript=transcript,
             extractor_model=str(extracted.target),
-            used_fallback=used_fallback,
+            used_fallback=False,
             inject_fault=ctx.inject_fault,
         )
 
@@ -473,9 +457,7 @@ class Orchestrator:
         def publish_tool(name: str, payload: dict, result: bool = False) -> None:
             kind = EventKind.TOOL_RESULT if result else EventKind.TOOL_CALL
             if result and name == "submit_bundle":
-                errors = payload.get("errors") or []
-                first = errors[0] if errors else "invalid"
-                summary = "accepted" if payload.get("ok") else f"rejected: {first}"
+                summary = "accepted" if payload.get("ok") else "needs correction"
             else:
                 summary = (
                     payload.get("term")

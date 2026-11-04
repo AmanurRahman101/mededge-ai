@@ -130,9 +130,9 @@ def test_public_export_is_disabled(request):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("with_audio,revoke_during_voice", [(True, False), (True, True), (False, False)])
+@pytest.mark.parametrize("with_audio,revoke_during_voice,fhir_failure", [(True, False, False), (True, True, False), (False, False, False), (False, False, True)])
 async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocation(
-    request, monkeypatch, with_audio, revoke_during_voice
+    request, monkeypatch, with_audio, revoke_during_voice, fhir_failure
 ):
     client = request.getfixturevalue("access_client")
     approved(client)
@@ -196,6 +196,11 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
     monkeypatch.setattr("app.pipeline.orchestrator.read_text_boxes", lambda image: [])
     monkeypatch.setattr("app.pipeline.orchestrator.transcribe_wav", fake_voice)
     monkeypatch.setattr(orchestrator.router, "structured", fake_structured)
+    if fhir_failure:
+        async def fail_bundle(*args, **kwargs):
+            raise RuntimeError("FHIR assembly unavailable")
+
+        monkeypatch.setattr(orchestrator, "_build_bundle", fail_bundle)
     image = io.BytesIO()
     Image.new("RGB", (100, 100), "white").save(image, format="PNG")
     ctx = RunContext("combo", image.getvalue(), recording() if with_audio else None, None, True, False, "image/png")
@@ -222,6 +227,8 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
             assert bool(table[0]["spoken_text"]) == with_audio
             assert table[0]["conflicts"] and table[0]["duration"] == "চলবে"
             assert db.get("combo").status == "reviewing"
+            if fhir_failure:
+                assert db.get("combo").bundle_json is None
             messages = [event.message for event in bus.history("combo")]
             assert ("Transcribing the doctor's recording" in messages) == with_audio
             assert "Reading the report and translating the dictation" in messages

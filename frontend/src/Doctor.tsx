@@ -50,7 +50,7 @@ export function Doctor({
 }: {
   initialRunId?: string | null;
 }) {
-  const { run, events, error: runError } = useRun(initialRunId);
+  const { run, error: runError } = useRun(initialRunId);
   const userId = useApp((state) => state.user?.id);
   const [recordTab, setRecordTab] = useState<"note" | "reading" | "source">(
     "reading",
@@ -288,7 +288,7 @@ export function Doctor({
       )}
       {run.status === "processing" && (
         <p className="banner review" role="status">
-          {events.at(-1)?.message || "Processing the report and recording…"}{" "}
+          Preparing the draft…{" "}
           Your draft will appear here for review. After you select Verify and
           publish, the note appears in the patient's record and chart history.
         </p>
