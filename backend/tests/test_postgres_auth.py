@@ -14,8 +14,10 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import delete
 
+from app import demo
 from app.auth.email import _reserve
 from app.auth.security import digest
 from app.config import Settings
@@ -25,8 +27,10 @@ from app.store.db import (
     AuthCounter,
     AuthSession,
     AuthUser,
+    ChartActivity,
     ChartConnection,
     ClinicalSummary,
+    RunGrant,
     RunRow,
 )
 
@@ -228,3 +232,25 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
         with ThreadPoolExecutor(max_workers=2) as executor:
             results = sorted(executor.map(reserve, (1, 2)))
         assert results == [200, 429]
+
+        # Real foreign keys must not let stale demo cleanup break startup.
+        demo_settings = settings.model_copy(update={
+            "demo_patient_email": "demo-patient@example.test",
+            "demo_doctor_email": "demo-doctor@example.test",
+            "demo_password": SecretStr("fictional-test-passphrase"),
+        })
+        db = client.app.state.db
+        demo.seed(db, demo_settings)
+        stale_id = uuid.uuid4().hex
+        old = now - timedelta(hours=5)
+        db.add(RunRow(id=stale_id, owner_id=demo.PATIENT_ID, status="reviewing",
+                      created_at=old, pseudonym="Fictional"))
+        with db.session() as session:
+            session.add(RunGrant(run_id=stale_id, user_id=demo.DOCTOR_ID, expires_at=now))
+            session.add(ChartActivity(id=uuid.uuid4().hex, patient_id=demo.PATIENT_ID,
+                                      actor_id=demo.DOCTOR_ID, action="prescription_created",
+                                      occurred_at=old, run_id=stale_id))
+            session.commit()
+        demo.reset(db, demo_settings)
+        assert db.get(stale_id) is None
+        assert db.get(record_id) is not None

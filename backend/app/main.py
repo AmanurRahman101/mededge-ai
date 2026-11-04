@@ -70,8 +70,10 @@ async def lifespan(app: FastAPI):
             settings, http, app.state.router, app.state.bus, app.state.db
         )
         app.state.orchestrator.storage = app.state.object_storage
-        await asyncio.to_thread(demo.reset, app.state.db, settings)
-        reset_task = asyncio.create_task(demo.reset_loop(app.state.db, settings))
+        await asyncio.to_thread(demo.seed, app.state.db, settings)
+        reset_task = asyncio.create_task(
+            demo.reset_loop(app.state.db, settings, app.state.object_storage)
+        )
         try:
             yield
         finally:

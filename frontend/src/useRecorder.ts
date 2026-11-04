@@ -15,6 +15,7 @@ export function useRecorder() {
     timer: number;
   } | null>(null);
   const alive = useRef(true);
+  const paused = useRef(false);
   const chunks = useRef<Int16Array[]>([]);
   const samples = useRef(0);
   const startingRef = useRef(false);
@@ -46,13 +47,19 @@ export function useRecorder() {
   stopRef.current = stop;
   useEffect(() => {
     alive.current = true;
+    const pause = () => { paused.current = true; stopRef.current(); };
+    const resume = () => { paused.current = false; };
+    window.addEventListener("mededge-session-pause", pause);
+    window.addEventListener("mededge-session-resume", resume);
     return () => {
       alive.current = false;
+      window.removeEventListener("mededge-session-pause", pause);
+      window.removeEventListener("mededge-session-resume", resume);
       dispose();
     };
   }, [dispose]);
   async function start() {
-    if (gear.current || startingRef.current) return;
+    if (gear.current || startingRef.current || paused.current) return;
     startingRef.current = true;
     setStarting(true);
     setError("");
@@ -63,13 +70,13 @@ export function useRecorder() {
     let context: AudioContext | undefined;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!alive.current) {
+      if (!alive.current || paused.current) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
       context = new AudioContext();
       await context.audioWorklet.addModule("/pcm16-worklet.js");
-      if (!alive.current) {
+      if (!alive.current || paused.current) {
         stream.getTracks().forEach((track) => track.stop());
         void context.close();
         return;

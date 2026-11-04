@@ -1291,6 +1291,8 @@ html.dark {
 .new-prescription .primary { justify-self: start; }
 .new-prescription audio, .prescription-audio audio { width: min(100%, 520px); }
 .prescription-workspace { max-width: 1200px; }
+.prescription-draft-fields, .medicine-form-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.medicine-form-fields { display: grid; gap: 14px; }
 .prescription-workspace > .module-heading { margin-top: 20px; }
 .prescription-audio { margin: 20px 0; }
 .prescription-editor, .prescription-assessment { margin: 24px 0; }

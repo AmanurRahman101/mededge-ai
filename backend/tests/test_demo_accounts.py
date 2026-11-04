@@ -4,12 +4,22 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
+from sqlalchemy import event
 
 from app import demo
 from app.config import Settings
 from app.main import create_app
 from app.pipeline.orchestrator import validate_image_size
-from app.store.db import ChartConnection, ClinicalSummary, RunRow
+from app.store.db import (
+    ChartActivity,
+    ChartConnection,
+    ChartDigest,
+    ClinicalSummary,
+    CurrentMedicine,
+    RunGrant,
+    RunRow,
+)
+from app.store.object_storage import StorageError
 
 PASSWORD = "demo-password-for-tests"
 
@@ -119,3 +129,61 @@ def test_restart_restores_missing_sample_images_without_replacing_saved_notes(de
         response = demo_client.get(f"/api/runs/demo-cbc/files/{name}")
         assert response.status_code == 200
         assert response.headers["content-type"] == "image/png"
+
+
+def test_reset_deletes_dependent_data_before_stale_demo_records(demo_client):
+    db = demo_client.app.state.db
+    # Exercise the constraint PostgreSQL enforces, rather than SQLite's default relaxed mode.
+    @event.listens_for(db.engine, "connect")
+    def foreign_keys(connection, _):
+        connection.execute("PRAGMA foreign_keys=ON")
+    db.engine.dispose()
+    old = datetime.now(UTC) - timedelta(hours=5)
+    db.add(RunRow(id="stale-prescription", status="reviewing", created_at=old,
+                  pseudonym="Fictional", owner_id=demo.PATIENT_ID))
+    with db.session() as session:
+        session.add(RunGrant(run_id="stale-prescription", user_id=demo.DOCTOR_ID,
+                             expires_at=datetime.now(UTC) + timedelta(hours=1)))
+        session.add(ChartActivity(id="stale-activity", patient_id=demo.PATIENT_ID,
+                                  actor_id=demo.DOCTOR_ID, run_id="stale-prescription",
+                                  action="prescription_created", occurred_at=old))
+        session.commit()
+    demo.reset(db, demo_client.app.state.settings)
+    assert db.get("stale-prescription") is None
+    with db.session() as session:
+        assert session.get(ChartActivity, "stale-activity") is None
+
+
+def test_reset_retries_private_storage_failure_and_preserves_real_records(demo_client):
+    db = demo_client.app.state.db
+    old = datetime.now(UTC) - timedelta(hours=5)
+    for run_id, owner in (("visitor-audio", demo.PATIENT_ID), ("real-record", "real-patient")):
+        db.add(RunRow(id=run_id, status="reviewing", created_at=old,
+                      pseudonym="Fictional", owner_id=owner))
+    with db.session() as session:
+        session.add(ChartDigest(patient_id=demo.PATIENT_ID, fingerprint="old",
+                                status="ready", updated_at=old))
+        session.add(CurrentMedicine(id="old-demo-medicine", patient_id=demo.PATIENT_ID,
+                                    name="Fictional", confirmed_at=old))
+        session.commit()
+
+    class Storage:
+        fail = True
+        deleted = []
+
+        def delete_record(self, run_id):
+            if self.fail:
+                raise StorageError("Fictional provider failure")
+            self.deleted.append(run_id)
+
+    storage = Storage()
+    demo.reset(db, demo_client.app.state.settings, storage)
+    assert db.get("visitor-audio") is not None  # Retain the pointer for retry.
+    storage.fail = False
+    demo.reset(db, demo_client.app.state.settings, storage)
+    assert storage.deleted == ["visitor-audio"]
+    assert db.get("visitor-audio") is None
+    assert db.get("real-record") is not None
+    with db.session() as session:
+        assert session.get(ChartDigest, demo.PATIENT_ID) is None
+        assert session.get(CurrentMedicine, "old-demo-medicine") is None

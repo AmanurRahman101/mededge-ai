@@ -98,6 +98,12 @@ function issues(value: string | string[]): string[] {
 }
 
 
+function doctorLocation(): { patientId: string; section: "overview" | "history" | "add" } {
+  const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  const section = params.get("section");
+  return { patientId: params.get("patient") || "", section: section === "history" || section === "add" ? section : "overview" };
+}
+
 export function Doctor({
   initialRunId = null,
 }: {
@@ -105,7 +111,7 @@ export function Doctor({
 }) {
   const isDemo = useApp((state) => state.user?.id) === "demo-doctor";
   const [chartTab, setChartTab] = useState<"overview" | "history" | "add">(
-    "overview",
+    () => doctorLocation().section,
   );
   const [recordTab, setRecordTab] = useState<"note" | "reading" | "source">(
     "reading",
@@ -118,7 +124,7 @@ export function Doctor({
   const [submissionMode, setSubmissionMode] = useState<"report" | "prescription">("report");
   const [imagePreparing, setImagePreparing] = useState(false);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [patientId, setPatientId] = useState("");
+  const [patientId, setPatientId] = useState(() => doctorLocation().patientId);
   const [records, setRecords] = useState<RecordItem[]>([]);
   const [more, setMore] = useState(false);
   const [offset, setOffset] = useState(0);
@@ -137,12 +143,42 @@ export function Doctor({
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageAttempt, setImageAttempt] = useState(0);
   const key = useRef(crypto.randomUUID());
+  const reportSubmitted = useRef(false);
+  const locationPatient = useRef(patientId);
   const recordsRequest = useRef(0);
   const recorder = useRecorder();
   const { run, events, error: runError } = useRun(initialRunId);
   const selectedPatient = connections.find(
     (c) => c.patient_id === patientId && c.status === "approved",
   );
+
+  useEffect(() => {
+    if (initialRunId) return;
+    const sync = () => {
+      const next = doctorLocation();
+      if (next.patientId !== locationPatient.current) {
+        recordsRequest.current++; setRecords([]); setImage(null); setSourceRunId("");
+        recorder.discard(); key.current = crypto.randomUUID();
+      }
+      locationPatient.current = next.patientId;
+      setPatientId(next.patientId); setChartTab(next.section); setOffset(0); setError("");
+    };
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, [initialRunId]);
+  useEffect(() => {
+    if (!initialRunId && connectionsLoaded && patientId && !selectedPatient) {
+      navigate("/doctor", true, true);
+      setError("This patient chart is unavailable. Choose a connected patient.");
+    }
+  }, [connectionsLoaded, patientId, selectedPatient?.patient_id, initialRunId]);
+  useEffect(() => {
+    if (initialRunId || submissionMode !== "report" || !(image || sourceRunId || recorder.audio || recorder.recording)) return;
+    const remove = registerNavigationGuard(() => reportSubmitted.current || window.confirm("Leave with an unsubmitted report or recording?"));
+    const leave = (event: BeforeUnloadEvent) => { if (!reportSubmitted.current) { event.preventDefault(); event.returnValue = ""; } };
+    window.addEventListener("beforeunload", leave);
+    return () => { remove(); window.removeEventListener("beforeunload", leave); };
+  }, [initialRunId, submissionMode, image, sourceRunId, recorder.audio, recorder.recording]);
 
   useEffect(() => {
     setImageMissing(false);
@@ -181,7 +217,7 @@ export function Doctor({
     void loadConnections().catch((caught) => setError(textError(caught)));
   }, [loadConnections]);
   useEffect(() => {
-    if (patientId && chartTab !== "overview")
+    if (selectedPatient && chartTab !== "overview")
       void loadRecords(patientId, offset).catch((caught) => {
         setRecordsLoading(false);
         setError(textError(caught));
@@ -191,7 +227,7 @@ export function Doctor({
       setRecords([]);
       setMore(false);
     }
-  }, [patientId, offset, chartTab, loadRecords]);
+  }, [patientId, selectedPatient?.patient_id, offset, chartTab, loadRecords]);
   useEffect(() => {
     if (run && ["reviewing", "approved", "exported"].includes(run.status)) {
       void loadSummaries(run.run_id).catch((caught) =>
@@ -245,7 +281,7 @@ export function Doctor({
     setError("");
     try {
       await post(`/api/chart/connections/${encodeURIComponent(id)}/revoke`);
-      setPatientId("");
+      navigate("/doctor", true, true);
       await loadConnections();
       setNotice("Patient disconnected.");
     } catch (caught) {
@@ -255,24 +291,17 @@ export function Doctor({
     }
   }
   function togglePatient(id: string) {
-    if (
-      (image || sourceRunId || recorder.audio) &&
-      !window.confirm(
-        "Discard the report and recording you have not submitted?",
-      )
-    )
-      return;
-    recordsRequest.current++;
-    setRecords([]);
-    setMore(false);
-    setImage(null);
-    setSourceRunId("");
-    recorder.discard();
-    key.current = crypto.randomUUID();
-    setPatientId(id);
-    setChartTab("overview");
-    setOffset(0);
-    setError("");
+    navigate(`/doctor?patient=${encodeURIComponent(id)}&section=overview`);
+  }
+  function openChartSection(section: "overview" | "history" | "add") {
+    if (section === chartTab) return;
+    navigate(`/doctor?patient=${encodeURIComponent(patientId)}&section=${section}`);
+  }
+  function changeSubmissionMode(mode: "report" | "prescription") {
+    if (mode === submissionMode) return;
+    if ((image || sourceRunId || recorder.audio) && !window.confirm("Discard the unsubmitted report and recording?")) return;
+    setImage(null); setSourceRunId(""); recorder.discard(); reportSubmitted.current = false;
+    setSubmissionMode(mode);
   }
   async function cancelRequest(id: string) {
     setBusy(true);
@@ -306,6 +335,7 @@ export function Doctor({
     setBusy(true);
     try {
       const created = await createRun(form);
+      reportSubmitted.current = true;
       key.current = crypto.randomUUID();
       navigate(`/doctor/records/${created.run_id}`);
     } catch (caught) {
@@ -553,7 +583,7 @@ export function Doctor({
               </div>
             ) : (
               <>
-                <button className="back-link chart-back" type="button" disabled={prescriptionLocked} onClick={() => { setPatientId(""); setRecords([]); }}>← All patients</button>
+                <button className="back-link chart-back" type="button" disabled={prescriptionLocked || recorder.recording || recorder.starting || busy} onClick={() => navigate("/doctor")}>← All patients</button>
                 <div className="selected-patient">
                   <div className="workspace-title">
                     <PixelWorkspaceIcon workspace="patient" size={36} />
@@ -570,24 +600,24 @@ export function Doctor({
                   <button
                     type="button"
                     aria-current={chartTab === "overview" ? "page" : undefined}
-                    disabled={prescriptionLocked}
-                    onClick={() => setChartTab("overview")}
+                    disabled={prescriptionLocked || recorder.recording || recorder.starting || busy}
+                    onClick={() => openChartSection("overview")}
                   >
                     <PixelVisit /> Overview
                   </button>
                   <button
                     type="button"
                     aria-current={chartTab === "history" ? "page" : undefined}
-                    disabled={prescriptionLocked}
-                    onClick={() => setChartTab("history")}
+                    disabled={prescriptionLocked || recorder.recording || recorder.starting || busy}
+                    onClick={() => openChartSection("history")}
                   >
                     <PixelDocument /> Reports & history
                   </button>
                   <button
                     type="button"
                     aria-current={chartTab === "add" ? "page" : undefined}
-                    disabled={prescriptionLocked}
-                    onClick={() => setChartTab("add")}
+                    disabled={prescriptionLocked || recorder.recording || recorder.starting || busy}
+                    onClick={() => openChartSection("add")}
                   >
                     <PixelPill /> Add report & note
                   </button>
@@ -698,8 +728,8 @@ export function Doctor({
                 {chartTab === "add" && (
                   <section className="submission-module" key={patientId}>
                     <div className="segmented" aria-label="What to add">
-                      <button type="button" disabled={prescriptionLocked || recorder.recording || recorder.starting || busy} aria-pressed={submissionMode === "report"} onClick={() => setSubmissionMode("report")}>Report & note</button>
-                      <button type="button" disabled={prescriptionLocked || recorder.recording || recorder.starting || busy} aria-pressed={submissionMode === "prescription"} onClick={() => setSubmissionMode("prescription")}>New prescription</button>
+                      <button type="button" disabled={prescriptionLocked || recorder.recording || recorder.starting || busy} aria-pressed={submissionMode === "report"} onClick={() => changeSubmissionMode("report")}>Report & note</button>
+                      <button type="button" disabled={prescriptionLocked || recorder.recording || recorder.starting || busy} aria-pressed={submissionMode === "prescription"} onClick={() => changeSubmissionMode("prescription")}>New prescription</button>
                     </div>
                     {submissionMode === "prescription" ? <NewPrescription patientId={patientId} isDemo={isDemo} onLockChange={setPrescriptionLocked} /> : <>
 
@@ -726,6 +756,7 @@ export function Doctor({
                               accept="image/*"
                               disabled={busy || imagePreparing}
                               onChange={(event) => {
+                                reportSubmitted.current = false;
                                 const picked = event.target.files?.[0];
                                 setSourceRunId("");
                                 key.current = crypto.randomUUID();
@@ -751,6 +782,7 @@ export function Doctor({
                                 value={sourceRunId}
                                 disabled={!!image || imagePreparing || busy}
                                 onChange={(e) => {
+                                  reportSubmitted.current = false;
                                   setSourceRunId(e.target.value);
                                   key.current = crypto.randomUUID();
                                 }}
@@ -794,6 +826,7 @@ export function Doctor({
                                 disabled={busy || recorder.starting}
                                 onClick={() => {
                                   key.current = crypto.randomUUID();
+                                  reportSubmitted.current = false;
                                   void recorder.start();
                                 }}
                               >

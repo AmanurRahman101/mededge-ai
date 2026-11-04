@@ -41,7 +41,7 @@ export function AuthPage({ path }: { path: string }) {
   const [token] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get("token") ?? "");
 
   useEffect(() => { if (path === "/signin") void getDemoAccounts().then(setDemoAccounts).catch(() => setDemoAccounts(null)); }, [path]);
-  useEffect(() => { if (window.location.hash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`); }, []);
+  useEffect(() => { if (window.location.hash) window.history.replaceState(window.history.state, "", `${window.location.pathname}${window.location.search}`); }, []);
   useEffect(() => { if (!cooldown) return; const timer = window.setTimeout(() => setCooldown((value) => value - 1), 1000); return () => window.clearTimeout(timer); }, [cooldown]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -50,7 +50,7 @@ export function AuthPage({ path }: { path: string }) {
     if ((path === "/verify-email" || path === "/reset-password") && !token) { setError("This link is missing its token. Request a new link to continue."); return; }
     setBusy(true);
     try {
-      if (path === "/signin") { const user = await login(email, password, remember); setUser(user); const next = sessionStorage.getItem("mededge-next"); sessionStorage.removeItem("mededge-next"); navigate(next && (next === "/account" || next.startsWith(`/${user.role}/`)) ? next : `/${user.role}`, true); }
+      if (path === "/signin") { const user = await login(email, password, remember); setUser(user); const next = sessionStorage.getItem("mededge-next"); sessionStorage.removeItem("mededge-next"); navigate(next && (next === "/account" || next === `/${user.role}` || next.startsWith(`/${user.role}?`) || next.startsWith(`/${user.role}/`)) ? next : `/${user.role}`, true); }
       else if (path === "/signup") { await register({ full_name: name.trim(), email, password, role }); setDone(true); }
       else if (path === "/verify-email") { await verifyEmail(token, password); setDone(true); setPassword(""); }
       else if (path === "/forgot-password") { await forgotPassword(email); setDone(true); }

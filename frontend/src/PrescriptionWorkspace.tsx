@@ -29,6 +29,11 @@ export function NewPrescription({ patientId, isDemo, onLockChange }: { patientId
     const remove = registerNavigationGuard(warn); window.addEventListener("beforeunload", leave);
     return () => { remove(); window.removeEventListener("beforeunload", leave); };
   }, [recorder.audio, recorder.recording]);
+  function chooseMode(next: "voice" | "manual") {
+    if (next === mode) return;
+    if (recorder.audio && !window.confirm("Discard the unsubmitted recording and write manually?")) return;
+    recorder.discard(); setMode(next); key.current = crypto.randomUUID();
+  }
   async function submit(e: FormEvent) {
     e.preventDefault(); setBusy(true); setError("");
     const data = new FormData(); data.append("mode", mode); data.append("idempotency_key", key.current);
@@ -42,15 +47,15 @@ export function NewPrescription({ patientId, isDemo, onLockChange }: { patientId
   return <form className="new-prescription" onSubmit={submit}>
     <h2>New prescription</h2>
     <div className="segmented" aria-label="Prescription entry method">
-      <button type="button" disabled={recorder.recording || busy} aria-pressed={mode === "voice"} onClick={() => { setMode("voice"); key.current = crypto.randomUUID(); }}>Dictate a prescription</button>
-      <button type="button" disabled={recorder.recording || busy} aria-pressed={mode === "manual"} onClick={() => { setMode("manual"); key.current = crypto.randomUUID(); }}>Write manually</button>
+      <button type="button" disabled={recorder.recording || recorder.starting || busy} aria-pressed={mode === "voice"} onClick={() => chooseMode("voice")}>Dictate a prescription</button>
+      <button type="button" disabled={recorder.recording || recorder.starting || busy} aria-pressed={mode === "manual"} onClick={() => chooseMode("manual")}>Write manually</button>
     </div>
     {mode === "voice" ? <>
       <p>Say each medicine’s name, strength, amount, morning/noon/night timing, instructions and duration. You can edit everything before publishing.</p>
       <p className="module-help">Up to 3 minutes. Meta transcribes and structures the recording; the original recording is saved in the patient’s chart.</p>
       <div className="action-group">
         <button className="secondary" type="button" disabled={busy || recorder.starting} onClick={() => { key.current = crypto.randomUUID(); if (recorder.recording) recorder.stop(); else void recorder.start(); }}>{recorder.starting ? "Opening microphone…" : recorder.recording ? "Stop recording" : recorder.audio ? "Record again" : "Start recording"}</button>
-        {recorder.audio && <button className="text-link" type="button" onClick={recorder.discard}>Discard recording</button>}
+        {recorder.audio && <button className="text-link" type="button" disabled={busy} onClick={recorder.discard}>Discard recording</button>}
       </div>
       {preview && <audio controls src={preview} aria-label="Prescription recording preview" />}
       <label>Or upload a recording (WAV)<input type="file" accept="audio/wav,.wav" disabled={busy || recorder.recording} onChange={e => { const file = e.target.files?.[0]; if (file) { key.current = crypto.randomUUID(); recorder.useBlob(file); } }} /></label>
@@ -125,7 +130,7 @@ export function PrescriptionWorkspace({ run: initial }: { run: Run }) {
       }}>Retry processing</button>}
     </section>}
     {run.audio_available && <section className="prescription-audio"><h2>Original dictation</h2><audio controls preload="metadata" aria-label="Original prescription dictation" src={`${apiBase}/api/runs/${run.run_id}/files/audio`} /></section>}
-    {draft && <>
+    {draft && <fieldset className="prescription-draft-fields" aria-label="Prescription draft" disabled={busy}>
       <details className="dictation-transcript"><summary>{run.input_mode === "voice_prescription" ? "Read or correct the transcript" : "Doctor’s additional note"}</summary><label>Doctor’s words<textarea value={draft.transcript} maxLength={20000} onChange={e => { setDraft({ ...draft, transcript: e.target.value, prescription: draft.prescription?.map(m => ({ ...m, confirmed: false })) }); setReviewed(false); }} /></label><p className="module-help">Changing this text does not rerun the AI. Update the medicine rows below to match your corrections.</p></details>
       {draft.unresolved && draft.unresolved !== "[]" && <details className="review-issues"><summary>Check unclear details from dictation</summary><p>{typeof draft.unresolved === "string" ? (() => { try { return JSON.parse(draft.unresolved).join("\n"); } catch { return draft.unresolved; } })() : draft.unresolved.join("\n")}</p></details>}
       <PrescriptionEditor medicines={draft.prescription || []} onChange={rows => { setDraft({ ...draft, prescription: rows }); setReviewed(false); }} />
@@ -137,7 +142,7 @@ export function PrescriptionWorkspace({ run: initial }: { run: Run }) {
         <div className="action-group"><button className="secondary" type="button" disabled={busy || !dirty} onClick={() => void save(false)}>Save draft</button>
           <button className="primary" type="button" disabled={busy || !reviewed || !draft.prescription?.length || draft.prescription.some(m => !m.confirmed || !m.name.trim()) || !draft.summary_en.trim() || !draft.summary_bn.trim() || !draft.transcript.trim()} onClick={() => void save(true)}>{busy ? "Saving…" : "Verify and publish prescription"}</button></div>
       </div>
-    </>}
+    </fieldset>}
     {ready && !draft && !published.length && <p className="empty-inline">The author has not published this prescription yet.</p>}
     {published.map(note => <article className="published-note" key={note.id}>
       <h2>Published prescription</h2><p>Patient: {run.patient_name || run.pseudonym}</p><p>{note.author_name} · {note.published_at && new Date(note.published_at).toLocaleString()}</p>

@@ -21,12 +21,17 @@ from app.pipeline.schemas import EncounterFields, Extraction, LoincHit
 from app.pipeline.terminology import loinc_is_valid
 from app.store.db import (
     AuthUser,
+    ChartActivity,
     ChartConnection,
+    ChartDigest,
     ClinicalSummary,
     ConsentEvent,
+    CurrentMedicine,
     Database,
+    RunGrant,
     RunRow,
 )
+from app.store.object_storage import PrivateObjectStorage, StorageError
 
 PATIENT_ID = "demo-patient"
 DOCTOR_ID = "demo-doctor"
@@ -157,7 +162,7 @@ def seed(db: Database, settings: Settings) -> None:
                 session.commit()
 
 
-def reset(db: Database, settings: Settings) -> None:
+def reset(db: Database, settings: Settings, storage: PrivateObjectStorage | None = None) -> None:
     """Remove stale demo runs (seeded ones included), then restore the seeded records."""
     if not enabled(settings):
         return
@@ -171,19 +176,44 @@ def reset(db: Database, settings: Settings) -> None:
                 created = created.replace(tzinfo=UTC)
             if created < cutoff:
                 stale.append(row.id)
-        for run_id in stale:
+    removed = []
+    for run_id in stale:
+        # Keep the database pointer when storage is unavailable so the next pass
+        # can retry removal. Never leave permanent demo objects orphaned.
+        try:
+            if storage:
+                storage.delete_record(run_id)
+        except StorageError:
+            continue
+        with db.session() as session:
+            row = session.get(RunRow, run_id)
+            if row is None or row.owner_id != PATIENT_ID:
+                continue
+            session.exec(delete(RunGrant).where(RunGrant.run_id == run_id))
+            session.exec(delete(ChartActivity).where(ChartActivity.run_id == run_id))
             session.exec(delete(ClinicalSummary).where(ClinicalSummary.run_id == run_id))
             session.exec(delete(RunRow).where(RunRow.id == run_id))
+            session.exec(delete(ChartDigest).where(ChartDigest.patient_id == PATIENT_ID))
+            session.commit()
+            removed.append(run_id)
+    with db.session() as session:
+        session.exec(delete(CurrentMedicine).where(
+            CurrentMedicine.patient_id == PATIENT_ID, CurrentMedicine.confirmed_at < cutoff,
+        ))
         session.commit()
-    for run_id in stale:
-        shutil.rmtree(db.runs_dir / run_id, ignore_errors=True)
+    for run_id in removed:
+        folder = db.runs_dir / run_id
+        if not folder.is_symlink() and folder.resolve().parent == db.runs_dir.resolve():
+            shutil.rmtree(folder, ignore_errors=True)
     seed(db, settings)
 
 
-async def reset_loop(db: Database, settings: Settings) -> None:
+async def reset_loop(
+    db: Database, settings: Settings, storage: PrivateObjectStorage | None = None,
+) -> None:
     while True:
-        await asyncio.sleep(3600)
         try:
-            await asyncio.to_thread(reset, db, settings)
+            await asyncio.to_thread(reset, db, settings, storage)
         except Exception:  # noqa: BLE001 - a failed reset must never stop the service
-            continue
+            pass
+        await asyncio.sleep(3600)

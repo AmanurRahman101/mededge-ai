@@ -15,7 +15,8 @@ export const setCsrfToken = (token: string) => { csrfToken = token; };
 export class ApiError extends Error {
   status: number;
   retryAfter: number;
-  constructor(message: string, status: number, retryAfter = 0) { super(message); this.status = status; this.retryAfter = retryAfter; }
+  code: string;
+  constructor(message: string, status: number, retryAfter = 0, code = "") { super(message); this.status = status; this.retryAfter = retryAfter; this.code = code; }
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -30,13 +31,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   }
   if (!response.ok) {
     let message = "Something went wrong. Please try again.";
+    let code = "";
     try {
-      const body = await response.json() as { detail?: string | { msg?: string }[] };
+      const body = await response.json() as { detail?: string | { msg?: string }[]; code?: string };
+      code = body.code || "";
       if (typeof body.detail === "string") message = body.detail;
       else if (Array.isArray(body.detail)) message = body.detail.map((item) => item.msg).filter(Boolean).join(". ") || message;
     } catch { /* keep the safe fallback */ }
-    if (response.status === 409 && message.includes("active account changed")) window.dispatchEvent(new Event("mededge-session-invalidated"));
-    throw new ApiError(message, response.status, Number(response.headers.get("Retry-After")) || 0);
+    if (code === "session_changed" || (response.status === 401 && !path.startsWith("/api/auth/"))) window.dispatchEvent(new Event("mededge-session-invalidated"));
+    throw new ApiError(message, response.status, Number(response.headers.get("Retry-After")) || 0, code);
   }
   return response.json() as Promise<T>;
 }
@@ -56,7 +59,7 @@ type Message = { message: string };
 
 export async function getSession(probe = false, requiredAccount?: string): Promise<User | null> {
   try { const data = await request<Session>("/api/auth/me"); if (requiredAccount && data.user.id !== requiredAccount) throw new ApiError("Your active account changed.", 409); if (!probe) { setCsrfToken(data.csrf_token); expectedAccount = data.user.id; } return data.user; }
-  catch (error) { if (error instanceof ApiError && error.status === 401) { if (!probe) { setCsrfToken(""); expectedAccount = ""; } return null; } throw error; }
+  catch (error) { if (error instanceof ApiError && error.status === 401) { if (!probe && !requiredAccount) { setCsrfToken(""); expectedAccount = ""; } return null; } throw error; }
 }
 export async function login(email: string, password: string, remember: boolean): Promise<User> {
   const data = await post<Session>("/api/auth/login", { email, password, remember });

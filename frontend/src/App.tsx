@@ -1,7 +1,7 @@
 import { UserCircle } from "@phosphor-icons/react";
 import { useCallback, useEffect, useState } from "react";
 
-import { getSession, logout, onSessionChange } from "./api";
+import { ApiError, getSession, logout, onSessionChange } from "./api";
 import "./session.css";
 import { AuthPage, AccountPage } from "./Auth";
 import { DemoPage } from "./Demo";
@@ -10,7 +10,7 @@ import { Patient } from "./Patient";
 import { PatientChart } from "./Chart";
 import { Start } from "./Start";
 import { PixelThemeToggle, PixelWorkspaceIcon } from "./PixelIcons";
-import { navigate } from "./navigation";
+import { confirmNavigation, navigate } from "./navigation";
 import { useApp } from "./store";
 
 export const DISCLAIMER =
@@ -24,7 +24,10 @@ export function App() {
   const [path, setPath] = useState(window.location.pathname);
   const [checking, setChecking] = useState(true);
   const [sessionPaused, setSessionPaused] = useState(false);
+  const [pauseReason, setPauseReason] = useState<"checking" | "changed" | "expired" | "offline">("checking");
   const [connectionError, setConnectionError] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   const bootstrap = useCallback(async () => {
     setChecking(true);
@@ -50,17 +53,18 @@ export function App() {
     const revalidate = async () => {
       const current = ++sequence;
       setSessionPaused(true);
+      setPauseReason("checking");
       window.dispatchEvent(new Event("mededge-session-pause"));
       try {
-        const next = await getSession(true);
+        const next = await getSession(false, user.id);
         if (!active || current !== sequence) return;
         if (next?.id === user.id) {
-          await getSession(false, user.id);
-          if (!active || current !== sequence) return;
           setSessionPaused(false);
           window.dispatchEvent(new Event("mededge-session-resume"));
-        }
-      } catch { /* Stay paused until the account can be checked. */ }
+        } else setPauseReason("expired");
+      } catch (error) {
+        if (active && current === sequence) setPauseReason(error instanceof ApiError && error.status === 409 ? "changed" : "offline");
+      }
     };
     const unsubscribe = onSessionChange(() => void revalidate());
     const onFocus = () => void revalidate();
@@ -84,8 +88,8 @@ export function App() {
         : doctorPath
           ? "?role=doctor"
           : "";
-      if (path !== "/patient" && path !== "/doctor")
-        sessionStorage.setItem("mededge-next", path);
+      if (window.location.search || (path !== "/patient" && path !== "/doctor"))
+        sessionStorage.setItem("mededge-next", path + window.location.search);
       navigate(`/signin${role}`, true);
     } else if (
       ((patientPath && user?.role !== "patient") ||
@@ -93,21 +97,26 @@ export function App() {
       user
     ) {
       navigate(`/${user.role}`, true);
+      setActionError(`You’re signed in with a ${user.role} account. Your ${user.role} workspace is open.`);
     }
   }, [checking, connectionError, path, user, sessionPaused]);
 
   async function signOut() {
+    if (signingOut || !confirmNavigation()) return;
+    setSigningOut(true);
+    setActionError("");
     try {
       await logout();
       setUser(null);
-      navigate("/");
+      setSessionPaused(false);
+      navigate("/", false, true);
     } catch (error) {
-      setConnectionError(
+      setActionError(
         error instanceof Error
           ? error.message
           : "Sign out failed. Please try again.",
       );
-    }
+    } finally { setSigningOut(false); }
   }
   const patientPath = path === "/patient" || path.startsWith("/patient/");
   const doctorPath = path === "/doctor" || path.startsWith("/doctor/");
@@ -142,6 +151,7 @@ export function App() {
             <>
               <button
                 className="top-link account-link"
+                aria-label="Account"
                 onClick={() => navigate("/account")}
                 type="button"
               >
@@ -149,10 +159,11 @@ export function App() {
               </button>
               <button
                 className="top-link"
+                disabled={signingOut}
                 onClick={() => void signOut()}
                 type="button"
               >
-                Sign out
+                {signingOut ? "Signing out…" : "Sign out"}
               </button>
             </>
           ) : (
@@ -174,7 +185,8 @@ export function App() {
           </button>
         </nav>
       </header>
-      {sessionPaused && <div className="session-warning" role="alert"><h1>Account changed</h1><p>This tab is paused to protect your work. Sign in to the original account in another tab, then return here. Unsaved edits remain in this tab while it stays open.</p><a href="/signin" target="_blank" rel="noreferrer">Open sign in in a new tab</a><button type="button" className="secondary" onClick={() => window.dispatchEvent(new Event("mededge-session-invalidated"))}>Check account again</button></div>}
+      {actionError && <div className="banner pii" role="alert">{actionError} <button className="text-link" type="button" onClick={() => setActionError("")}>Dismiss message</button></div>}
+      {sessionPaused && <div className="session-warning" role="alert"><h1>{pauseReason === "checking" ? "Checking your session…" : pauseReason === "expired" ? "Please sign in again" : pauseReason === "offline" ? "We couldn’t check your session" : "Account changed"}</h1><p>{pauseReason === "offline" ? "Check your connection, then try again. Your work stays in this tab while it remains open." : "This tab is paused to protect your work. Sign in to the original account in another tab, then return here. Unsaved edits remain in this tab while it stays open."}</p>{pauseReason !== "checking" && <><a href="/signin" target="_blank" rel="noreferrer">Open sign in in a new tab</a><button type="button" className="secondary" onClick={() => window.dispatchEvent(new Event("mededge-session-invalidated"))}>Check account again</button></>}</div>}
       {checking ? (
         <main className="stage loading-stage" aria-live="polite">
           <span className="loading-dot" /> Connecting to MedEdge…
