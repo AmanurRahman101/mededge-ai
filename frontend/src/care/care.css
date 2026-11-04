@@ -1,6 +1,27 @@
 .care-app .topbar {
+  position: relative;
   min-height: 64px;
   padding: 8px 24px;
+}
+.top-workspace-label {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .care-app .topbar { flex-wrap: wrap; row-gap: 0; }
+  .top-workspace-label {
+    position: static;
+    transform: none;
+    order: 3;
+    width: 100%;
+    padding-bottom: 4px;
+    text-align: left;
+  }
 }
 .care-app .primary,
 .care-app .secondary {

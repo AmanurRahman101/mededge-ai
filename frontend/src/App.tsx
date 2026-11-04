@@ -179,6 +179,11 @@ export function App() {
             .
           </span>
         </button>
+        {user && (patientPath || doctorPath || path === "/account") && (
+          <span className="top-workspace-label">
+            {user.role === "doctor" ? "Doctor workspace" : t("Patient portal")}
+          </span>
+        )}
         <nav className="top-actions" aria-label="Account and appearance">
           {user ? (
             <>
