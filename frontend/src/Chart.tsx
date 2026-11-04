@@ -52,6 +52,8 @@ const activityText: Record<string, string> = {
 
 type PatientTab = "records" | "doctors" | "activity" | "summary" | "history";
 function currentTab(): PatientTab {
+  if (window.location.pathname.endsWith("/doctors")) return "doctors";
+  if (window.location.pathname.endsWith("/activity")) return "activity";
   const value = new URLSearchParams(window.location.search).get("tab");
   return value === "doctors" || value === "activity" || value === "summary" || value === "history"
     ? value
@@ -94,7 +96,7 @@ function RecordMenu({ children }: { children: ReactNode }) {
   );
 }
 
-export function PatientChart() {
+export function PatientChart({ embedded = false }: { embedded?: boolean }) {
   const { t, message, format, locale, language } = usePatientLanguage();
   const user = useApp((state) => state.user);
   const [tab, setTab] = useState<PatientTab>(currentTab);
@@ -175,12 +177,13 @@ export function PatientChart() {
     setActivity(log.activity);
   }, []);
   useEffect(() => {
+    if (tab !== "records") return;
     const timer = window.setTimeout(() => void loadRecords(), 250);
     return () => {
       window.clearTimeout(timer);
       requestSequence.current++;
     };
-  }, [loadRecords]);
+  }, [loadRecords, tab]);
   useEffect(() => {
     void loadConnections().catch((e) =>
       setError(
@@ -213,9 +216,10 @@ export function PatientChart() {
     setSearch(value);
     setOffset(0);
   }
+  const Frame = embedded ? "section" : "main";
   return (
-    <main className="workspace patient-workspace">
-      <header className="workspace-heading">
+    <Frame className={embedded ? "embedded-chart" : "workspace patient-workspace"}>
+      {!embedded && <><header className="workspace-heading">
         <div className="workspace-title">
           <PixelWorkspaceIcon workspace="patient" size={42} />
           <div>
@@ -254,7 +258,7 @@ export function PatientChart() {
           onClick={() => selectTab("summary")}
         >
           <PixelVitals size={18} />{t("My summary")}</button>
-      </nav>
+      </nav></>}
       {error && (
         <p className="banner pii" role="alert">
           {message(error)}
@@ -661,6 +665,6 @@ export function PatientChart() {
         </section>
       )}
 
-    </main>
+    </Frame>
   );
 }

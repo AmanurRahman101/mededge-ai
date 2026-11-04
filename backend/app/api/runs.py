@@ -50,6 +50,17 @@ def _row_or_404(request: Request, run_id: str) -> RunRow:
     if row.owner_id != user.id:
         if user.role != "doctor" or not active_connection(_db(request), row.owner_id, user.id):
             raise HTTPException(status_code=404, detail="Unknown run")
+    if row.visit_id and user.role == "doctor":
+        from app.visit_access import visit_access
+
+        with _db(request).session() as session:
+            visit_access(
+                session,
+                row.visit_id,
+                user,
+                write=request.method not in {"GET", "HEAD"}
+                and not request.url.path.startswith("/api/visits/"),
+            )
     return row
 
 
@@ -65,6 +76,7 @@ async def create_run(
     patient_id: str | None = Form(default=None),
     idempotency_key: str | None = Form(default=None),
     source_run_id: str | None = Form(default=None),
+    visit_id: str | None = Form(default=None),
 ) -> dict:
     user = require_user(request)
     if demo.is_demo(user.id) and image is not None:
@@ -78,6 +90,15 @@ async def create_run(
             raise HTTPException(422, "Invalid submission key.")
     elif user.role != "doctor" and audio is not None:
         raise HTTPException(422, "Patient uploads accept images only.")
+    if visit_id:
+        from app.visit_access import visit_access
+
+        with _db(request).session() as session:
+            visit = visit_access(
+                session, visit_id, user, write=user.role == "doctor", open_only=True
+            )
+            if visit.patient_id != (patient_id if user.role == "doctor" else user.id):
+                raise HTTPException(404, "Visit not found.")
     image_bytes: bytes | None = None
     mime = "image/jpeg"
     if case_id:
@@ -143,7 +164,7 @@ async def create_run(
     submission_digest = None
     if user.role == "doctor" and not case_id:
         submission_digest = hashlib.sha256(
-            patient_id.encode()
+            (patient_id + (visit_id or "")).encode()
             + b"\0"
             + hashlib.sha256(image_bytes).digest()
             + hashlib.sha256(audio_bytes).digest()
@@ -184,6 +205,10 @@ async def create_run(
             raise HTTPException(503, "Could not save the uploaded files. Please retry.") from None
     try:
         with db.session() as session:
+            if visit_id:
+                visit_access(
+                    session, visit_id, user, write=user.role == "doctor", open_only=True, lock=True
+                )
             if submission_digest:
                 connection = session.exec(
                     select(ChartConnection)
@@ -202,6 +227,7 @@ async def create_run(
                     created_at=datetime.now(UTC),
                     pseudonym=anon,
                     inject_fault=inject_fault,
+                    visit_id=visit_id,
                     owner_id=patient_id if user.role == "doctor" and not case_id else user.id,
                     submitted_by=user.id,
                     submission_key=idempotency_key if submission_digest else None,
@@ -209,9 +235,11 @@ async def create_run(
                 )
             )
             session.commit()
-    except IntegrityError:
+    except (IntegrityError, HTTPException) as error:
         if not case_id and storage:
             await asyncio.to_thread(storage.delete_record, run_id)
+        if isinstance(error, HTTPException):
+            raise
         with db.session() as session:
             previous = session.exec(
                 select(RunRow).where(
@@ -251,11 +279,20 @@ async def get_run(run_id: str, request: Request) -> dict:
     row = _row_or_404(request, run_id)
     result = _public(row)
     result["patient_id"] = row.owner_id
+    result["visit_id"] = row.visit_id
     result["source_available"] = (_db(request).runs_dir / run_id / "redacted.png").is_file()
     result["original_available"] = False
     result["audio_available"] = False
+    user = require_user(request)
+    from app.store.db import ClinicalSummary
+    with _db(request).session() as session:
+        notes = session.exec(select(ClinicalSummary).where(ClinicalSummary.run_id == row.id)).all()
+        result["has_prescription_table"] = any(
+            bool(note.prescription_json)
+            for note in notes if note.status == "published" or note.author_id == user.id
+        )
     authored = row.input_mode in {"voice_prescription", "manual_prescription"}
-    if authored:
+    if row.owner_id:
         from app.store.db import AuthUser
 
         with _db(request).session() as session:

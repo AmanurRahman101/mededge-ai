@@ -73,6 +73,8 @@ export function Patient({
     setBusy(true);
     setLocalError("");
     try {
+      const visitId = new URLSearchParams(window.location.search).get("visit");
+      if (visitId) form.append("visit_id", visitId);
       const created = await createRun(form);
       setRunId(created.run_id);
       navigate(`/patient/records/${created.run_id}`);
@@ -131,7 +133,7 @@ export function Patient({
       <button
         className="back-link"
         type="button"
-        onClick={() => navigate("/patient")}
+        onClick={() => navigate(run?.visit_id ? `/patient/visits/${run.visit_id}` : "/patient/files")}
       >
         ← {t("My records")}
       </button>

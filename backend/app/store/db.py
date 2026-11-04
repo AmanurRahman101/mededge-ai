@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import UniqueConstraint, func, inspect, text
+from sqlalchemy import Column, ForeignKey, Index, String, UniqueConstraint, func, inspect, text
 from sqlmodel import Field, Session, SQLModel, create_engine, select
 
 from app.config import Settings
@@ -16,6 +16,7 @@ class RunRow(SQLModel, table=True):
     created_at: datetime
     pseudonym: str
     owner_id: str | None = Field(default=None, index=True)
+    visit_id: str | None = Field(default=None, foreign_key="visit.id", index=True)
     document_type: str | None = None
     input_mode: str = "image"
     extraction_json: str | None = None
@@ -106,6 +107,44 @@ class CurrentMedicine(SQLModel, table=True):
     name: str
     instructions: str = ""
     confirmed_at: datetime
+
+
+class Visit(SQLModel, table=True):
+    """A patient-owned encounter inside one doctor's independent workspace."""
+
+    __table_args__ = (
+        UniqueConstraint("doctor_id", "submission_key", name="uq_visit_submission"),
+        Index(
+            "uq_visit_open",
+            "patient_id",
+            "doctor_id",
+            unique=True,
+            sqlite_where=text("status = 'open'"),
+            postgresql_where=text("status = 'open'"),
+        ),
+    )
+    id: str = Field(primary_key=True)
+    patient_id: str = Field(index=True, foreign_key="authuser.id")
+    doctor_id: str = Field(index=True, foreign_key="authuser.id")
+    title: str = "Consultation"
+    status: str = "open"
+    created_at: datetime
+    completed_at: datetime | None = None
+    revision: int = 1
+    submission_key: str
+
+
+class VisitReference(SQLModel, table=True):
+    """An existing report used in a visit, without moving or copying its source."""
+
+    visit_id: str = Field(
+        sa_column=Column(String, ForeignKey("visit.id", ondelete="CASCADE"), primary_key=True)
+    )
+    run_id: str = Field(
+        sa_column=Column(String, ForeignKey("runrow.id", ondelete="CASCADE"), primary_key=True)
+    )
+    added_by: str = Field(foreign_key="authuser.id")
+    added_at: datetime
 
 
 class SpendRow(SQLModel, table=True):

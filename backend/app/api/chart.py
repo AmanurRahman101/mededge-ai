@@ -11,7 +11,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, update
+from sqlalchemy import delete, or_, update
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
@@ -29,6 +29,7 @@ from app.store.db import (
     ConsentEvent,
     RunGrant,
     RunRow,
+    Visit,
 )
 
 router = APIRouter(prefix="/api/chart", tags=["chart"])
@@ -392,6 +393,7 @@ def records(
     document_type: str | None = None,
     status: str | None = None,
     include_source: bool = True,
+    earlier: bool = False,
 ):
     user = require_user(request)
     owner_id = patient_id or user.id
@@ -411,6 +413,19 @@ def records(
             if not connection or connection.status != "approved":
                 raise HTTPException(404, "Chart not found.")
         stmt = select(RunRow).where(RunRow.owner_id == owner_id, RunRow.archived == archived)
+        if user.role == "doctor":
+            stmt = stmt.where(
+                or_(
+                    RunRow.visit_id.is_(None),
+                    RunRow.visit_id.in_(
+                        select(Visit.id).where(
+                            or_(Visit.doctor_id == user.id, Visit.status == "completed")
+                        )
+                    ),
+                )
+            )
+        if earlier:
+            stmt = stmt.where(RunRow.visit_id.is_(None))
         if search.strip():
             stmt = stmt.where(RunRow.title.ilike("%" + search.strip().replace("%", "") + "%"))
         if document_type:
@@ -477,7 +492,17 @@ def patient_overview(
             raise HTTPException(404, "Chart not found.")
         rows = session.exec(
             select(RunRow)
-            .where(RunRow.owner_id == patient_id)
+            .where(
+                RunRow.owner_id == patient_id,
+                or_(
+                    RunRow.visit_id.is_(None),
+                    RunRow.visit_id.in_(
+                        select(Visit.id).where(
+                            or_(Visit.doctor_id == doctor.id, Visit.status == "completed")
+                        )
+                    ),
+                ),
+            )
             .order_by(RunRow.created_at.desc(), RunRow.id.desc())
             .offset(max(offset, 0))
             .limit(limit + 1)
@@ -730,6 +755,10 @@ def download_fhir(run_id: str, request: Request):
             if not connection or connection.status != "approved":
                 raise HTTPException(404, "Record not found.")
             activity(session, row.owner_id, doctor.id, "fhir_downloaded", run_id)
+        if row.visit_id:
+            from app.visit_access import visit_access
+
+            visit_access(session, row.visit_id, doctor)
         if row.status not in {"approved", "exported"} or not row.bundle_json:
             raise HTTPException(409, "Approve the FHIR bundle before downloading.")
         content = row.bundle_json
@@ -776,9 +805,10 @@ async def delete_record(run_id: str, request: Request):
                     ) from None
         else:
             raise HTTPException(500, "Could not safely delete the source files.")
-        from app.store.db import ChartDigest
+        from app.store.db import ChartDigest, VisitReference
 
         session.exec(delete(ChartDigest).where(ChartDigest.patient_id == patient.id))
+        session.exec(delete(VisitReference).where(VisitReference.run_id == run_id))
         session.exec(delete(ClinicalSummary).where(ClinicalSummary.run_id == run_id))
         session.exec(delete(RunGrant).where(RunGrant.run_id == run_id))
         session.exec(delete(ChartActivity).where(ChartActivity.run_id == run_id))
@@ -897,7 +927,9 @@ async def save_summary(
             raise HTTPException(422, "Review both versions of the note before publishing.")
         if publish and summary.unresolved not in ("", "[]") and not body.acknowledge_unresolved:
             raise HTTPException(422, "Review and acknowledge unresolved details.")
-        is_prescription = row.input_mode in {"voice_prescription", "manual_prescription"}
+        is_prescription = row.input_mode in {"voice_prescription", "manual_prescription"} or bool(
+            summary.prescription_json
+        )
         if is_prescription and body.prescription is None:
             raise HTTPException(422, "Include the prescription table when saving this record.")
         if body.prescription is not None:
@@ -909,7 +941,10 @@ async def save_summary(
             if len(ids) != len(set(ids)):
                 raise HTTPException(422, "Each medicine row must have a unique identifier.")
             if publish and (
-                not body.prescription
+                (
+                    not body.prescription
+                    and row.input_mode in {"voice_prescription", "manual_prescription"}
+                )
                 or any(not item.name or not item.confirmed for item in body.prescription)
             ):
                 raise HTTPException(422, "Confirm each medicine name and row before publishing.")

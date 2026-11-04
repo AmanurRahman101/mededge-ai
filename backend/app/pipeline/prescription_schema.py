@@ -14,6 +14,8 @@ class PrescribedMedicine(BaseModel):
     other_schedule: str = Field(default="", max_length=500)
     instructions: str = Field(default="", max_length=1000)
     duration: str = Field(default="", max_length=200)
+    image_text: str = Field(default="", max_length=1200)
+    conflicts: list[str] = Field(default_factory=list, max_length=12)
     spoken_text: str = Field(default="", max_length=1200)
     confirmed: bool = False
 

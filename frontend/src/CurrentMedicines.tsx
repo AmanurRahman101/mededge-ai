@@ -38,6 +38,7 @@ export function CurrentMedicines({ patientId, editable, refreshKey = 0 }: { pati
     return () => { active = false; };
   }, [path, reload, refreshKey]);
   function closeForm() { setAdding(false); setEditing(null); setName(""); setInstructions(""); requestAnimationFrame(() => addButton.current?.focus()); }
+  if (!editable && !loading && !error && !medicines.length) return null;
   return <section className="current-medicines" aria-label="Current medicines">
     <div className="module-heading">
       <h2><PixelPill size={22} /> {editable ? t("Medicines I take now") : "Current medicines"}</h2>

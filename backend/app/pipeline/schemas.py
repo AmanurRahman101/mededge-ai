@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.pipeline.prescription_schema import PrescribedMedicine
+
 
 class LabRow(BaseModel):
     raw_name: str
@@ -37,6 +39,7 @@ class Extraction(BaseModel):
 
 
 class ConsultationDraft(BaseModel):
+    medicines: list[PrescribedMedicine] = Field(default_factory=list, max_length=40)
     extraction: Extraction
     summary_en: str
     summary_bn: str

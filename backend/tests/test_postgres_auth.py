@@ -32,6 +32,8 @@ from app.store.db import (
     ClinicalSummary,
     RunGrant,
     RunRow,
+    Visit,
+    VisitReference,
 )
 
 PG_URL = os.environ.get("TEST_POSTGRES_URL")
@@ -174,10 +176,25 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
         client.cookies.set("mededge_session", doctor_cookie)
         client.headers["x-csrf-token"] = doctor_csrf
         assert client.get(medicines_path).status_code == 200
+
         # Explicit migration and prescription publication on PostgreSQL.
+        def start_visit(index):
+            return client.post(
+                "/api/visits",
+                json={
+                    "patient_id": patient_id,
+                    "idempotency_key": f"concurrent-visit-{index}",
+                },
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            visit_responses = list(executor.map(start_visit, (1, 2)))
+        assert all(response.status_code == 200 for response in visit_responses)
+        visit_id = visit_responses[0].json()["id"]
+        assert visit_responses[1].json()["id"] == visit_id
         created = client.post(
             f"/api/chart/patients/{patient_id}/prescriptions",
-            data={"mode": "manual", "idempotency_key": uuid.uuid4().hex},
+            data={"mode": "manual", "idempotency_key": uuid.uuid4().hex, "visit_id": visit_id},
         )
         assert created.status_code == 200, created.text
         rx_id = created.json()["run_id"]
@@ -207,11 +224,20 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
             == 200
         )
         assert client.get(summary_path).json()["summaries"][0]["prescription"][0]["morning"] == "½"
+        visit = client.get(f"/api/visits/{visit_id}").json()
+        assert visit["records"][0]["run_id"] == rx_id
+        assert (
+            client.post(
+                f"/api/visits/{visit_id}/complete", json={"expected_revision": visit["revision"]}
+            ).status_code
+            == 200
+        )
 
         assert client.post(f"/api/chart/connections/{patient_id}/revoke").status_code == 200
         assert client.get(medicines_path).status_code == 404
         assert client.get(path).status_code == 404
         assert client.post(path).status_code == 404
+        assert client.get(f"/api/visits/{visit_id}").status_code == 404
 
         # Two concurrent requests share a single remaining daily reservation.
         with client.app.state.db.session() as session:
@@ -234,23 +260,59 @@ def test_postgres_migration_auth_and_atomic_budget(tmp_path: Path):
         assert results == [200, 429]
 
         # Real foreign keys must not let stale demo cleanup break startup.
-        demo_settings = settings.model_copy(update={
-            "demo_patient_email": "demo-patient@example.test",
-            "demo_doctor_email": "demo-doctor@example.test",
-            "demo_password": SecretStr("fictional-test-passphrase"),
-        })
+        demo_settings = settings.model_copy(
+            update={
+                "demo_patient_email": "demo-patient@example.test",
+                "demo_doctor_email": "demo-doctor@example.test",
+                "demo_password": SecretStr("fictional-test-passphrase"),
+            }
+        )
         db = client.app.state.db
         demo.seed(db, demo_settings)
         stale_id = uuid.uuid4().hex
         old = now - timedelta(hours=5)
-        db.add(RunRow(id=stale_id, owner_id=demo.PATIENT_ID, status="reviewing",
-                      created_at=old, pseudonym="Fictional"))
+        db.add(
+            RunRow(
+                id=stale_id,
+                owner_id=demo.PATIENT_ID,
+                status="reviewing",
+                created_at=old,
+                pseudonym="Fictional",
+            )
+        )
         with db.session() as session:
+            session.add(
+                Visit(
+                    id="stale-demo-visit",
+                    patient_id=demo.PATIENT_ID,
+                    doctor_id=demo.DOCTOR_ID,
+                    created_at=old,
+                    submission_key="demo",
+                )
+            )
+            session.flush()
+            session.add(
+                VisitReference(
+                    visit_id="stale-demo-visit",
+                    run_id=stale_id,
+                    added_by=demo.DOCTOR_ID,
+                    added_at=old,
+                )
+            )
             session.add(RunGrant(run_id=stale_id, user_id=demo.DOCTOR_ID, expires_at=now))
-            session.add(ChartActivity(id=uuid.uuid4().hex, patient_id=demo.PATIENT_ID,
-                                      actor_id=demo.DOCTOR_ID, action="prescription_created",
-                                      occurred_at=old, run_id=stale_id))
+            session.add(
+                ChartActivity(
+                    id=uuid.uuid4().hex,
+                    patient_id=demo.PATIENT_ID,
+                    actor_id=demo.DOCTOR_ID,
+                    action="prescription_created",
+                    occurred_at=old,
+                    run_id=stale_id,
+                )
+            )
             session.commit()
         demo.reset(db, demo_settings)
         assert db.get(stale_id) is None
+        with db.session() as session:
+            assert session.get(Visit, "stale-demo-visit") is None
         assert db.get(record_id) is not None

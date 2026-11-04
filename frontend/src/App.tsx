@@ -8,9 +8,9 @@ import { AuthPage, AccountPage } from "./Auth";
 import { DemoPage } from "./Demo";
 import { Doctor } from "./Doctor";
 import { Patient } from "./Patient";
-import { PatientChart } from "./Chart";
+import { CarePortal } from "./care/CarePortal";
 import { Start } from "./Start";
-import { PixelThemeToggle, PixelWorkspaceIcon } from "./PixelIcons";
+import { PixelThemeToggle } from "./PixelIcons";
 import { confirmNavigation, navigate } from "./navigation";
 import { useApp } from "./store";
 
@@ -83,6 +83,15 @@ export function App() {
   }, []);
   useEffect(() => {
     if (checking || connectionError || sessionPaused) return;
+    if (user?.role === "patient" && path === "/patient" && window.location.search) {
+      const tab = new URLSearchParams(window.location.search).get("tab");
+      const target = { records: "files", summary: "health", doctors: "doctors", activity: "activity" }[tab || ""];
+      if (target) { navigate(`/patient/${target}`, true); return; }
+    }
+    if (user?.role === "doctor" && path === "/doctor") {
+      const patient = new URLSearchParams(window.location.search).get("patient");
+      if (patient) { navigate(`/doctor/patients/${encodeURIComponent(patient)}`, true); return; }
+    }
     const patientPath = path === "/patient" || path.startsWith("/patient/");
     const doctorPath = path === "/doctor" || path.startsWith("/doctor/");
     if ((patientPath || doctorPath || path === "/account") && !user) {
@@ -102,7 +111,7 @@ export function App() {
       navigate(`/${user.role}`, true);
       setActionError(`You’re signed in with a ${user.role} account. Your ${user.role} workspace is open.`);
     }
-  }, [checking, connectionError, path, user, sessionPaused]);
+  }, [checking, connectionError, path, locationKey, user, sessionPaused]);
 
   useEffect(() => {
     if (checking || connectionError) return;
@@ -158,7 +167,7 @@ export function App() {
   const doctorPath = path === "/doctor" || path.startsWith("/doctor/");
   const protectedPath = patientPath || doctorPath || path === "/account";
   return (
-    <div className={`app${sessionPaused ? " session-paused" : ""}`}>
+    <div className={`app care-app${sessionPaused ? " session-paused" : ""}`}>
       <header className="topbar">
         <button
           className="wordmark"
@@ -170,18 +179,6 @@ export function App() {
             .
           </span>
         </button>
-        {user && (
-          <button
-            className="workspace-switch"
-            type="button"
-            onClick={() => navigate(`/${user.role}`)}
-          >
-            <PixelWorkspaceIcon workspace={user.role} size={24} />
-            <span>
-              {user.role === "doctor" ? "Doctor workspace" : t("Patient portal")}
-            </span>
-          </button>
-        )}
         <nav className="top-actions" aria-label="Account and appearance">
           {user ? (
             <>
@@ -246,19 +243,19 @@ export function App() {
         <main className="stage" aria-live="polite">
           Opening your workspace…
         </main>
-      ) : path === "/patient" ? (
-        <PatientChart />
       ) : path === "/patient/upload" ? (
         <Patient key={path} />
       ) : path.startsWith("/patient/records/") ? (
         <Patient key={path} initialRunId={path.split("/")[3]} />
-      ) : doctorPath ? (
+      ) : path.startsWith("/doctor/records/") ? (
         <Doctor
           key={path}
           initialRunId={
             path.startsWith("/doctor/records/") ? path.split("/")[3] : null
           }
         />
+      ) : patientPath || doctorPath ? (
+        <CarePortal key={path} />
       ) : path === "/account" ? (
         <AccountPage />
       ) : path === "/demo" ? (

@@ -1,18 +1,453 @@
 {
-  "motion": {
-    "state": "180ms cubic-bezier(0.16, 1, 0.3, 1)",
-    "hover": "200ms cubic-bezier(0.16, 1, 0.3, 1)"
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-04T17:32:00.796946+00:00",
+  "title": "Design System: MedEdge AI",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Zinc Canvas",
+        "canonical": "#f4f4f5",
+        "tonalRamp": [
+          "oklch(15% 0.0013 286.38)",
+          "oklch(26% 0.0013 286.38)",
+          "oklch(38% 0.0013 286.38)",
+          "oklch(49% 0.0013 286.38)",
+          "oklch(61% 0.0013 286.38)",
+          "oklch(72% 0.0013 286.38)",
+          "oklch(84% 0.0013 286.38)",
+          "oklch(95% 0.0013 286.38)"
+        ]
+      },
+      "fg": {
+        "role": "neutral",
+        "displayName": "Clinical Ink",
+        "canonical": "#18181b",
+        "tonalRamp": [
+          "oklch(15% 0.0059 285.89)",
+          "oklch(26% 0.0059 285.89)",
+          "oklch(38% 0.0059 285.89)",
+          "oklch(49% 0.0059 285.89)",
+          "oklch(61% 0.0059 285.89)",
+          "oklch(72% 0.0059 285.89)",
+          "oklch(84% 0.0059 285.89)",
+          "oklch(95% 0.0059 285.89)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Supporting Ink",
+        "canonical": "#3f3f46",
+        "tonalRamp": [
+          "oklch(15% 0.0119 285.81)",
+          "oklch(26% 0.0119 285.81)",
+          "oklch(38% 0.0119 285.81)",
+          "oklch(49% 0.0119 285.81)",
+          "oklch(61% 0.0119 285.81)",
+          "oklch(72% 0.0119 285.81)",
+          "oklch(84% 0.0119 285.81)",
+          "oklch(95% 0.0119 285.81)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Zinc Rule",
+        "canonical": "#d4d4d8",
+        "tonalRamp": [
+          "oklch(15% 0.0055 286.29)",
+          "oklch(26% 0.0055 286.29)",
+          "oklch(38% 0.0055 286.29)",
+          "oklch(49% 0.0055 286.29)",
+          "oklch(61% 0.0055 286.29)",
+          "oklch(72% 0.0055 286.29)",
+          "oklch(84% 0.0055 286.29)",
+          "oklch(95% 0.0055 286.29)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Paper Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Clinical Blue",
+        "canonical": "#2159c2",
+        "tonalRamp": [
+          "oklch(15% 0.1749 261.50)",
+          "oklch(26% 0.1749 261.50)",
+          "oklch(38% 0.1749 261.50)",
+          "oklch(49% 0.1749 261.50)",
+          "oklch(61% 0.1749 261.50)",
+          "oklch(72% 0.1749 261.50)",
+          "oklch(84% 0.1749 261.50)",
+          "oklch(95% 0.1749 261.50)"
+        ]
+      },
+      "accent-soft": {
+        "role": "primary",
+        "displayName": "Clinical Blue Tint",
+        "canonical": "#eaf0ff",
+        "tonalRamp": [
+          "oklch(15% 0.0212 268.43)",
+          "oklch(26% 0.0212 268.43)",
+          "oklch(38% 0.0212 268.43)",
+          "oklch(49% 0.0212 268.43)",
+          "oklch(61% 0.0212 268.43)",
+          "oklch(72% 0.0212 268.43)",
+          "oklch(84% 0.0212 268.43)",
+          "oklch(95% 0.0212 268.43)"
+        ]
+      },
+      "pii": {
+        "role": "secondary",
+        "displayName": "Privacy Rose",
+        "canonical": "#9f1239",
+        "tonalRamp": [
+          "oklch(15% 0.1713 13.70)",
+          "oklch(26% 0.1713 13.70)",
+          "oklch(38% 0.1713 13.70)",
+          "oklch(49% 0.1713 13.70)",
+          "oklch(61% 0.1713 13.70)",
+          "oklch(72% 0.1713 13.70)",
+          "oklch(84% 0.1713 13.70)",
+          "oklch(95% 0.1713 13.70)"
+        ]
+      },
+      "ok": {
+        "role": "secondary",
+        "displayName": "Verified Green",
+        "canonical": "#166534",
+        "tonalRamp": [
+          "oklch(15% 0.1083 151.33)",
+          "oklch(26% 0.1083 151.33)",
+          "oklch(38% 0.1083 151.33)",
+          "oklch(49% 0.1083 151.33)",
+          "oklch(61% 0.1083 151.33)",
+          "oklch(72% 0.1083 151.33)",
+          "oklch(84% 0.1083 151.33)",
+          "oklch(95% 0.1083 151.33)"
+        ]
+      },
+      "review": {
+        "role": "secondary",
+        "displayName": "Review Amber",
+        "canonical": "#92400e",
+        "tonalRamp": [
+          "oklch(15% 0.1247 46.20)",
+          "oklch(26% 0.1247 46.20)",
+          "oklch(38% 0.1247 46.20)",
+          "oklch(49% 0.1247 46.20)",
+          "oklch(61% 0.1247 46.20)",
+          "oklch(72% 0.1247 46.20)",
+          "oklch(84% 0.1247 46.20)",
+          "oklch(95% 0.1247 46.20)"
+        ]
+      },
+      "dark-bg": {
+        "role": "neutral",
+        "displayName": "Dark Zinc Canvas",
+        "canonical": "#09090b",
+        "tonalRamp": [
+          "oklch(15% 0.0044 285.82)",
+          "oklch(26% 0.0044 285.82)",
+          "oklch(38% 0.0044 285.82)",
+          "oklch(49% 0.0044 285.82)",
+          "oklch(61% 0.0044 285.82)",
+          "oklch(72% 0.0044 285.82)",
+          "oklch(84% 0.0044 285.82)",
+          "oklch(95% 0.0044 285.82)"
+        ]
+      },
+      "dark-fg": {
+        "role": "neutral",
+        "displayName": "Dark Clinical Ink",
+        "canonical": "#fafafa",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(26% 0.0000 89.88)",
+          "oklch(38% 0.0000 89.88)",
+          "oklch(49% 0.0000 89.88)",
+          "oklch(61% 0.0000 89.88)",
+          "oklch(72% 0.0000 89.88)",
+          "oklch(84% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "dark-muted": {
+        "role": "neutral",
+        "displayName": "Dark Supporting Ink",
+        "canonical": "#d4d4d8",
+        "tonalRamp": [
+          "oklch(15% 0.0055 286.29)",
+          "oklch(26% 0.0055 286.29)",
+          "oklch(38% 0.0055 286.29)",
+          "oklch(49% 0.0055 286.29)",
+          "oklch(61% 0.0055 286.29)",
+          "oklch(72% 0.0055 286.29)",
+          "oklch(84% 0.0055 286.29)",
+          "oklch(95% 0.0055 286.29)"
+        ]
+      },
+      "dark-line": {
+        "role": "neutral",
+        "displayName": "Dark Zinc Rule",
+        "canonical": "#3f3f46",
+        "tonalRamp": [
+          "oklch(15% 0.0119 285.81)",
+          "oklch(26% 0.0119 285.81)",
+          "oklch(38% 0.0119 285.81)",
+          "oklch(49% 0.0119 285.81)",
+          "oklch(61% 0.0119 285.81)",
+          "oklch(72% 0.0119 285.81)",
+          "oklch(84% 0.0119 285.81)",
+          "oklch(95% 0.0119 285.81)"
+        ]
+      },
+      "dark-surface": {
+        "role": "neutral",
+        "displayName": "Dark Paper Surface",
+        "canonical": "#18181b",
+        "tonalRamp": [
+          "oklch(15% 0.0059 285.89)",
+          "oklch(26% 0.0059 285.89)",
+          "oklch(38% 0.0059 285.89)",
+          "oklch(49% 0.0059 285.89)",
+          "oklch(61% 0.0059 285.89)",
+          "oklch(72% 0.0059 285.89)",
+          "oklch(84% 0.0059 285.89)",
+          "oklch(95% 0.0059 285.89)"
+        ]
+      },
+      "dark-accent": {
+        "role": "primary",
+        "displayName": "Dark Clinical Blue",
+        "canonical": "#9abbff",
+        "tonalRamp": [
+          "oklch(15% 0.1038 264.22)",
+          "oklch(26% 0.1038 264.22)",
+          "oklch(38% 0.1038 264.22)",
+          "oklch(49% 0.1038 264.22)",
+          "oklch(61% 0.1038 264.22)",
+          "oklch(72% 0.1038 264.22)",
+          "oklch(84% 0.1038 264.22)",
+          "oklch(95% 0.1038 264.22)"
+        ]
+      },
+      "dark-accent-soft": {
+        "role": "primary",
+        "displayName": "Dark Clinical Blue Tint",
+        "canonical": "#1a2944",
+        "tonalRamp": [
+          "oklch(15% 0.0541 261.47)",
+          "oklch(26% 0.0541 261.47)",
+          "oklch(38% 0.0541 261.47)",
+          "oklch(49% 0.0541 261.47)",
+          "oklch(61% 0.0541 261.47)",
+          "oklch(72% 0.0541 261.47)",
+          "oklch(84% 0.0541 261.47)",
+          "oklch(95% 0.0541 261.47)"
+        ]
+      },
+      "dark-pii": {
+        "role": "secondary",
+        "displayName": "Dark Privacy Rose",
+        "canonical": "#fda4af",
+        "tonalRamp": [
+          "oklch(15% 0.1061 11.64)",
+          "oklch(26% 0.1061 11.64)",
+          "oklch(38% 0.1061 11.64)",
+          "oklch(49% 0.1061 11.64)",
+          "oklch(61% 0.1061 11.64)",
+          "oklch(72% 0.1061 11.64)",
+          "oklch(84% 0.1061 11.64)",
+          "oklch(95% 0.1061 11.64)"
+        ]
+      },
+      "dark-ok": {
+        "role": "secondary",
+        "displayName": "Dark Verified Green",
+        "canonical": "#86efac",
+        "tonalRamp": [
+          "oklch(15% 0.1363 154.45)",
+          "oklch(26% 0.1363 154.45)",
+          "oklch(38% 0.1363 154.45)",
+          "oklch(49% 0.1363 154.45)",
+          "oklch(61% 0.1363 154.45)",
+          "oklch(72% 0.1363 154.45)",
+          "oklch(84% 0.1363 154.45)",
+          "oklch(95% 0.1363 154.45)"
+        ]
+      },
+      "dark-review": {
+        "role": "secondary",
+        "displayName": "Dark Review Amber",
+        "canonical": "#fcd34d",
+        "tonalRamp": [
+          "oklch(15% 0.1534 91.61)",
+          "oklch(26% 0.1534 91.61)",
+          "oklch(38% 0.1534 91.61)",
+          "oklch(49% 0.1534 91.61)",
+          "oklch(61% 0.1534 91.61)",
+          "oklch(72% 0.1534 91.61)",
+          "oklch(84% 0.1534 91.61)",
+          "oklch(95% 0.1534 91.61)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Care heading",
+        "purpose": "Patient and visit page title; 25px on phones."
+      },
+      "body": {
+        "displayName": "Clinical body",
+        "purpose": "English and Bengali clinical content."
+      }
+    },
+    "shadows": [
+      {
+        "name": "sheet-light",
+        "value": "0 10px 24px rgb(24 24 27 / 0.08)",
+        "purpose": "Existing light-theme document sheets and menus."
+      },
+      {
+        "name": "sheet-dark",
+        "value": "0 12px 28px rgb(0 0 0 / 0.35)",
+        "purpose": "Existing dark-theme document sheets and menus."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state",
+        "value": "180ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Base button hover translation; disabled with reduced motion."
+      },
+      {
+        "name": "choice-hover",
+        "value": "200ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Landing choice background."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "care-phone",
+        "value": "760px"
+      },
+      {
+        "name": "prescription-compare",
+        "value": "1000px"
+      },
+      {
+        "name": "entry-stack",
+        "value": "800px"
+      }
+    ]
   },
-  "elevation": {
-    "sheet": "0 12px 28px rgb(0 0 0 / 0.35)"
-  },
-  "breakpoints": {
-    "stack": "800px",
-    "drawer": "1279px"
-  },
-  "rules": [
-    "Semantic color only: rose for hidden identifiers, green for verified, amber for review.",
-    "One primary action per step.",
-    "Reduced motion removes the hover shift."
-  ]
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "description": "Care-shell action with a visible label and focus ring.",
+      "html": "<button class=\"ds-button-primary\">Start visit</button>",
+      "css": ".ds-button-primary{font-family:Geist,\"Noto Sans Bengali\",\"Segoe UI\",sans-serif;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;border:1px solid var(--fg);border-radius:7px;font-weight:500;cursor:pointer;transition:transform 180ms cubic-bezier(0.16,1,0.3,1);background:var(--fg);color:var(--bg);}.ds-button-primary:hover:not(:disabled){transform:translateY(-1px);}.ds-button-primary:focus-visible{outline:2px solid var(--fg);outline-offset:3px;}.ds-button-primary:disabled{opacity:.45;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition:none;}.ds-button-primary:hover:not(:disabled){transform:none;}}",
+      "refersTo": "button-primary"
+    },
+    {
+      "name": "Secondary action",
+      "kind": "button",
+      "description": "Care-shell action with a visible label and focus ring.",
+      "html": "<button class=\"ds-button-secondary\">Save draft</button>",
+      "css": ".ds-button-secondary{font-family:Geist,\"Noto Sans Bengali\",\"Segoe UI\",sans-serif;display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 18px;border:1px solid var(--fg);border-radius:7px;font-weight:500;cursor:pointer;transition:transform 180ms cubic-bezier(0.16,1,0.3,1);background:transparent;color:var(--fg);}.ds-button-secondary:hover:not(:disabled){transform:translateY(-1px);}.ds-button-secondary:focus-visible{outline:2px solid var(--fg);outline-offset:3px;}.ds-button-secondary:disabled{opacity:.45;cursor:not-allowed;}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition:none;}.ds-button-secondary:hover:not(:disabled){transform:none;}}",
+      "refersTo": "button-secondary"
+    },
+    {
+      "name": "Clinical field",
+      "kind": "input",
+      "description": "Persistent label and editable clinical text.",
+      "html": "<label class=\"ds-field\">Medicine name<input type=\"text\" value=\"\" placeholder=\"Enter medicine name\"></label>",
+      "css": ".ds-field{font-family:Geist,\"Noto Sans Bengali\",\"Segoe UI\",sans-serif;display:grid;gap:8px;color:var(--fg);font-size:14px;}.ds-field input{font-family:Geist,\"Noto Sans Bengali\",\"Segoe UI\",sans-serif;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--fg);font-size:16px;}.ds-field input:focus-visible{outline:2px solid var(--fg);outline-offset:3px;}",
+      "refersTo": "input"
+    },
+    {
+      "name": "Workspace navigation",
+      "kind": "nav",
+      "description": "Rail item with explicit current-page state.",
+      "html": "<nav class=\"ds-navigation\" aria-label=\"Workspace\"><button aria-current=\"page\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 16 16\" shape-rendering=\"crispEdges\" aria-hidden=\"true\"><rect x=\"7\" y=\"1\" width=\"2\" height=\"3\" fill=\"var(--review, #dc2626)\"/><rect x=\"6\" y=\"2\" width=\"4\" height=\"1\" fill=\"var(--review, #dc2626)\"/><rect x=\"2\" y=\"4\" width=\"12\" height=\"11\" fill=\"currentColor\"/><rect x=\"4\" y=\"6\" width=\"2\" height=\"2\" fill=\"var(--paper, #ffffff)\"/><rect x=\"10\" y=\"6\" width=\"2\" height=\"2\" fill=\"var(--paper, #ffffff)\"/><rect x=\"7\" y=\"11\" width=\"2\" height=\"4\" fill=\"var(--paper, #ffffff)\"/></svg><span>Visits</span></button></nav>",
+      "css": ".ds-navigation button{font-family:Geist,\"Noto Sans Bengali\",\"Segoe UI\",sans-serif;display:flex;align-items:center;gap:12px;min-height:48px;width:208px;padding:12px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted);text-align:start;}.ds-navigation button:hover{background:var(--surface);}.ds-navigation button[aria-current=\"page\"]{background:var(--surface);border-color:var(--line);color:var(--fg);font-weight:600;}.ds-navigation button:focus-visible{outline:2px solid var(--fg);outline-offset:3px;}"
+    },
+    {
+      "name": "Visit status",
+      "kind": "chip",
+      "description": "Text names the status; semantic color reinforces it.",
+      "html": "<span class=\"ds-status\">Open</span>",
+      "css": ".ds-status{font-family:Geist,\"Noto Sans Bengali\",\"Segoe UI\",sans-serif;display:inline-block;border:1px solid var(--line);border-radius:5px;padding:4px 7px;font-size:12px;color:var(--review);background:transparent;}",
+      "refersTo": "status"
+    },
+    {
+      "name": "Review notice",
+      "kind": "card",
+      "description": "Contained feedback inside an otherwise flat task.",
+      "html": "<section class=\"ds-notice\" role=\"status\">Check every medicine before publishing.</section>",
+      "css": ".ds-notice{font-family:Geist,\"Noto Sans Bengali\",\"Segoe UI\",sans-serif;padding:14px 16px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--review);font-size:16px;}"
+    },
+    {
+      "name": "Visit row",
+      "kind": "custom",
+      "description": "Divided dated consultation row, without nested cards.",
+      "html": "<button class=\"ds-visit\"><span><strong>Doctor visit</strong><span>Doctor · 4 Nov 2026</span></span><span class=\"ds-visit-state\">Completed</span></button>",
+      "css": ".ds-visit{font-family:Geist,\"Noto Sans Bengali\",\"Segoe UI\",sans-serif;display:flex;align-items:center;gap:12px;width:100%;min-height:76px;padding:16px 4px;border:0;border-bottom:1px solid var(--line);background:transparent;color:var(--fg);text-align:start;}.ds-visit>span:first-child{display:grid;gap:5px;flex:1;}.ds-visit strong{font-size:16px;}.ds-visit>span>span{font-size:14px;color:var(--muted);}.ds-visit-state{font-size:12px;border:1px solid var(--line);border-radius:5px;padding:4px 7px;color:var(--ok);}.ds-visit:hover{background:var(--surface);}.ds-visit:focus-visible{outline:2px solid var(--fg);outline-offset:3px;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "One consultation, one place",
+    "overview": "MedEdge uses restrained clinical typography, zinc surfaces and supplied pixel illustrations. Pixel heart, stethoscope and category marks identify workspaces and tasks; conventional text and forms carry clinical evidence. The care shell gives desktop navigation its own narrow rail and keeps the active task in one main column.\n\nThe hierarchy follows a short patient overview into dated visits and then into one report, prescription or note. Rules and whitespace separate content. Review detail expands where needed; the overview stays concise. Preserve the footer, account controls and both themes.",
+    "keyCharacteristics": [
+      "Pixel identity with readable English and Bengali clinical text.",
+      "Flat zinc surfaces, restrained blue selection and semantic review colors.",
+      "One patient or visit heading and a clear next action.",
+      "Source evidence close to editable clinical content."
+    ],
+    "rules": [
+      {
+        "name": "The Semantic Color Rule",
+        "body": "Status color accompanies explicit text; preserve the same meaning in both themes.",
+        "section": "colors"
+      },
+      {
+        "name": "The Clinical Text Rule",
+        "body": "Keep medicine names, doses and authored evidence in readable text; pixel marks identify categories rather than replacing text.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Visit Rule",
+        "body": "Use separators and spacing for patient and visit lists; reserve contained surfaces for fields, notices or document tools that need them.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** preserve pixel task marks, Geist, Bengali glyph coverage and both themes.",
+      "**Do** give a patient or visit one main heading and a clear next action.",
+      "**Do** keep source evidence accessible beside or behind the review pane.",
+      "**Do** show status in words with visible focus, processing feedback and retries.",
+      "**Do** keep the short health narrative separate from detailed sources and patient-reported medicines."
+    ],
+    "donts": [
+      "**Don't** restore the old persistent patient directory or Summary/History/Add report tab structure in the care shell.",
+      "**Don't** turn every visit row or narrative into a nested card.",
+      "**Don't** expose raw FHIR bundles or model trace panels in either portal.",
+      "**Don't** replace clinical labels with decorative pixel text or color-only status.",
+      "**Don't** hide the reason publication or visit completion is unavailable."
+    ]
+  }
 }

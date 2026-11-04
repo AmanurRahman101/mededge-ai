@@ -1,0 +1,640 @@
+.care-app .topbar {
+  min-height: 64px;
+  padding: 8px 24px;
+}
+.care-app .primary,
+.care-app .secondary {
+  border-radius: 7px;
+  min-height: 44px;
+  font-weight: 500;
+}
+.care-shell {
+  display: grid;
+  grid-template-columns: 208px minmax(0, 1fr);
+  width: min(1280px, calc(100% - 48px));
+  margin: 0 auto;
+  flex: 1;
+}
+.care-navigation {
+  padding: 28px 20px 24px 0;
+  border-right: 1px solid var(--line);
+}
+.care-role {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  margin-bottom: 24px;
+}
+.care-navigation nav {
+  display: grid;
+  gap: 6px;
+}
+.care-navigation nav button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  text-align: start;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.care-navigation nav button:hover {
+  background: var(--surface);
+}
+.care-navigation nav button[aria-current="page"] {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--fg);
+  font-weight: 600;
+}
+.care-signed-in {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 28px 12px;
+  overflow-wrap: anywhere;
+}
+.care-main {
+  min-width: 0;
+  padding: 24px 0 48px 32px;
+}
+.care-toolbar {
+  min-height: 44px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.care-toolbar .patient-language {
+  margin: 0;
+}
+.care-toolbar .back-link {
+  margin: 0;
+}
+.care-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.care-heading h1 {
+  font-size: 28px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.care-heading p {
+  color: var(--muted);
+  margin: 8px 0 0;
+  max-width: 65ch;
+  font-size: 15px;
+}
+.care-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.care-section {
+  margin: 28px 0;
+}
+.care-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.care-section-heading h2,
+.care-health h2,
+.care-report-form h2 {
+  font-size: 19px;
+  margin: 0;
+  font-weight: 600;
+}
+.care-section-heading .text-link {
+  min-height: 44px;
+}
+.care-health {
+  padding: 0 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+.care-narrative {
+  max-width: 68ch;
+  line-height: 1.75;
+  margin: 8px 0 0;
+  font-size: 16px;
+  white-space: pre-line;
+}
+.care-health-compact .care-narrative {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.care-main > .text-link {
+  min-height: 44px;
+  margin-block: 4px;
+}
+.care-help,
+.care-empty-inline {
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 65ch;
+  line-height: 1.6;
+}
+.care-search {
+  display: grid;
+  gap: 8px;
+  max-width: 460px;
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+.care-patient-list {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+.care-patient-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: start;
+  width: 100%;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 20px 4px;
+  min-width: 0;
+}
+.care-patient-row > span:first-of-type {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.care-patient-row strong {
+  font-size: 18px;
+}
+.care-patient-row > span > span {
+  color: var(--muted);
+  font-size: 14px;
+  max-width: 65ch;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.care-open-label {
+  font-size: 14px;
+  white-space: nowrap;
+}
+.care-patient-row:hover,
+.care-list-row:hover {
+  background: var(--surface);
+}
+.care-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 16px 4px;
+  text-align: start;
+  min-height: 76px;
+}
+.care-row-icon {
+  flex-shrink: 0;
+  width: 36px;
+  display: flex;
+  justify-content: center;
+}
+.care-row-copy {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+}
+.care-row-copy strong {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.care-row-copy > span {
+  color: var(--muted);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.care-status {
+  font-size: 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+.care-status.open {
+  color: var(--review);
+}
+.care-status.completed {
+  color: var(--ok);
+}
+.care-visit-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+  margin: -12px 0 24px;
+}
+.care-visit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+.care-empty {
+  padding: 32px 0;
+  max-width: 60ch;
+}
+.care-empty h2,
+.care-empty h3 {
+  font-size: 19px;
+  margin: 16px 0 8px;
+}
+.care-empty p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.care-error,
+.care-notice {
+  padding: 14px 16px;
+  margin: 16px 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+}
+.care-error {
+  color: var(--pii);
+}
+.care-error p {
+  margin: 0 0 10px;
+}
+.care-pagination {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+}
+.care-connect,
+.care-attach {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  max-width: 620px;
+  margin: 20px 0;
+}
+.care-connect label,
+.care-attach label {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.care-visit-finish {
+  border-top: 1px solid var(--line);
+  margin-top: 28px;
+  padding-top: 12px;
+}
+.care-visit-finish > .text-link {
+  min-height: 44px;
+  margin-bottom: 20px;
+}
+.care-completion-checks {
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.75;
+}
+.care-report-form {
+  max-width: 940px;
+}
+.care-input-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  margin: 24px 0;
+}
+.care-input-pair > section {
+  min-width: 0;
+}
+.care-input-pair h2 {
+  margin-bottom: 16px;
+}
+.care-input-pair label {
+  display: grid;
+  gap: 8px;
+  margin-block: 12px;
+}
+.care-input-pair audio {
+  width: 100%;
+  margin: 16px 0;
+}
+.care-input-pair details {
+  margin-top: 16px;
+}
+.care-input-pair summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding-block: 10px;
+}
+.care-submit {
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.embedded-chart {
+  min-width: 0;
+}
+.embedded-chart .chart-section {
+  padding: 0;
+  margin: 0;
+}
+.embedded-chart .chart-heading {
+  margin: 0 0 20px;
+}
+.embedded-chart .chart-heading h2,
+.embedded-chart .chart-heading .lede {
+  display: none;
+}
+.embedded-chart .connection-card {
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  padding: 20px 0;
+  max-width: none;
+}
+.embedded-chart .connection-card h3 {
+  margin-top: 0;
+}
+.embedded-chart .record-row {
+  padding-block: 16px;
+}
+.embedded-chart .record-row h3 {
+  font-size: 17px;
+}
+.embedded-chart .chart-filters {
+  margin-block: 0 20px;
+}
+.embedded-chart > .chart-section > .text-link {
+  display: none;
+}
+.embedded-chart .chart-heading > div {
+  display: grid;
+  gap: 8px;
+}
+.embedded-chart .consent-details {
+  max-width: 65ch;
+}
+.embedded-chart .connection-code {
+  max-width: 620px;
+}
+.care-app .record-workspace,
+.care-app .prescription-workspace {
+  margin-top: 24px;
+}
+.care-app .workspace-heading h1,
+.care-app .prescription-workspace h1 {
+  font-size: 28px;
+}
+.care-app .note-module .module-heading h2 {
+  font-size: 22px;
+}
+.care-app .footer {
+  font-size: 12px;
+  padding-block: 16px;
+}
+.care-app .auth-layout {
+  padding-top: 36px;
+}
+.care-app .choices {
+  gap: 24px;
+}
+.care-app .choice {
+  border-radius: 12px;
+}
+@media (max-width: 760px) {
+  .care-app .topbar {
+    padding: 8px 16px;
+    min-height: 60px;
+  }
+  .care-shell {
+    display: flex;
+    flex-direction: column;
+    width: calc(100% - 32px);
+  }
+  .care-navigation {
+    padding: 12px 0;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .care-role,
+  .care-signed-in {
+    display: none;
+  }
+  .care-navigation nav {
+    display: flex;
+    gap: 4px;
+  }
+  .care-navigation nav button {
+    flex: 1;
+    min-width: 0;
+    min-height: 64px;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    padding: 8px 3px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .care-main {
+    padding: 12px 0 32px;
+  }
+  .care-heading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .care-heading h1 {
+    font-size: 25px;
+  }
+  .care-heading p {
+    font-size: 14px;
+  }
+  .care-section {
+    margin-block: 24px;
+  }
+  .care-open-label {
+    display: none;
+  }
+  .care-patient-row {
+    padding: 18px 0;
+    gap: 12px;
+  }
+  .care-status {
+    white-space: normal;
+    text-align: center;
+    max-width: 82px;
+  }
+  .care-row-icon {
+    width: 28px;
+  }
+  .care-list-row {
+    gap: 8px;
+  }
+  .care-input-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .care-input-pair > section + section {
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+  .care-visit-finish .care-section-heading {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+  .care-app .top-actions {
+    gap: 10px;
+  }
+}
+@media print {
+  .care-navigation,
+  .care-toolbar,
+  .care-heading .care-actions {
+    display: none !important;
+  }
+  .care-shell {
+    display: block;
+    width: 100%;
+  }
+  .care-main {
+    padding: 0;
+  }
+}
+
+.care-app .note-only-layout {
+  display: block;
+  max-width: 900px;
+  margin-inline: auto;
+}
+.care-app .note-only-layout .doctor-review-content {
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+}
+.prescription-scan {
+  margin: 20px 0;
+  max-width: 600px;
+}
+.rx-scan-scroll {
+  overflow: auto;
+  max-height: 70vh;
+  margin-top: 12px;
+}
+.prescription-scan img {
+  display: block;
+  max-width: none;
+  height: auto;
+}
+.care-app .rx-mobile-views {
+  display: none;
+}
+@media (min-width: 1000px) {
+  .rx-review-grid:has(.prescription-scan) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 0 24px;
+  }
+  .prescription-scan {
+    grid-column: 1;
+    align-self: start;
+    position: sticky;
+    top: 20px;
+  }
+  .prescription-scan + .prescription-draft-fields {
+    grid-column: 2;
+  }
+  .prescription-scan + .prescription-draft-fields .prescription-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .prescription-scan + .prescription-draft-fields .medicine-name,
+  .prescription-scan + .prescription-draft-fields .medicine-instructions,
+  .prescription-scan + .prescription-draft-fields .dose-slots {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 999px) {
+  .care-app .rx-mobile-views {
+    display: flex;
+    margin-block: 16px;
+  }
+  .rx-view-review .prescription-scan,
+  .rx-view-source:has(.prescription-scan) .prescription-draft-fields {
+    display: none;
+  }
+}
+@media print {
+  .rx-review-grid {
+    display: block !important;
+  }
+  .prescription-scan {
+    display: none !important;
+  }
+}
+
+.care-artifact-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.care-artifact-row > .care-list-row {
+  border: 0;
+  flex: 1;
+  min-width: 0;
+}
+.care-artifact-row > .text-link {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+.care-access-settings {
+  padding-block: 16px;
+  margin-top: 24px;
+}
+.care-access-settings summary {
+  cursor: pointer;
+  min-height: 44px;
+  padding-block: 10px;
+}
+@media (max-width: 480px) {
+  .care-artifact-row {
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .care-artifact-row > .text-link {
+    margin: 0 0 10px 40px;
+  }
+}

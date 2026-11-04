@@ -184,6 +184,7 @@ async def create_prescription(
     mode: str = Form(),
     idempotency_key: str = Form(),
     audio: UploadFile | None = File(default=None),
+    visit_id: str | None = Form(default=None),
 ):
     doctor = require_role(request, "doctor")
     db = request.app.state.db
@@ -191,12 +192,21 @@ async def create_prescription(
         raise HTTPException(404, "Patient chart not found.")
     if mode not in {"voice", "manual"} or not 1 <= len(idempotency_key) <= 128:
         raise HTTPException(422, "Choose voice or manual entry and supply a submission key.")
+    if visit_id:
+        from app.visit_access import visit_access
+
+        with db.session() as session:
+            visit = visit_access(session, visit_id, doctor, write=True, open_only=True)
+            if visit.patient_id != patient_id:
+                raise HTTPException(404, "Visit not found.")
     data = await audio.read(9_000_001) if audio else b""
     if mode == "voice":
         validate_audio(data)
     elif data:
         raise HTTPException(422, "Manual prescriptions do not accept a recording.")
-    fingerprint = hashlib.sha256(patient_id.encode() + mode.encode() + data).hexdigest()
+    fingerprint = hashlib.sha256(
+        patient_id.encode() + (visit_id or "").encode() + mode.encode() + data
+    ).hexdigest()
     with db.session() as session:
         previous = session.exec(
             select(RunRow).where(
@@ -216,6 +226,7 @@ async def create_prescription(
     row = RunRow(
         id=run_id,
         owner_id=patient_id,
+        visit_id=visit_id,
         submitted_by=doctor.id,
         submission_key=idempotency_key,
         submission_digest=fingerprint,
@@ -242,6 +253,8 @@ async def create_prescription(
     try:
         with db.session() as session:
             consent(session, patient_id, doctor.id)
+            if visit_id:
+                visit_access(session, visit_id, doctor, write=True, open_only=True, lock=True)
             session.add(row)
             session.flush()
             if mode == "manual":

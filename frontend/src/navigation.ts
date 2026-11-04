@@ -15,11 +15,12 @@ export function doctorChartUrl(patientId: string, page = 0) {
 export function doctorRecordUrl(runId: string, patientId: string, offset = 0) {
   return `/doctor/records/${encodeURIComponent(runId)}?${new URLSearchParams({ patient: patientId, page: String(Math.floor(offset / 20)) })}`;
 }
-export function recordReturnUrl(patientId?: string) {
+export function recordReturnUrl(patientId?: string, visitId?: string | null) {
+  if (visitId) return `/doctor/visits/${visitId}`;
   if (!patientId) return "/doctor";
   const params = new URLSearchParams(window.location.search);
   const page = params.get("patient") === patientId ? Math.max(0, Number(params.get("page")) || 0) : 0;
-  return doctorChartUrl(patientId, page);
+  return `/doctor/patients/${encodeURIComponent(patientId)}${page ? `?page=${page}` : ""}`;
 }
 
 if (typeof window !== "undefined") {

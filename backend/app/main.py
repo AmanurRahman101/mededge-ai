@@ -11,7 +11,18 @@ from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import update
 
 from app import demo
-from app.api import auth, cases, chart, dev, health, medicine_reference, prescriptions, runs, share
+from app.api import (
+    auth,
+    cases,
+    chart,
+    dev,
+    health,
+    medicine_reference,
+    prescriptions,
+    runs,
+    share,
+    visits,
+)
 from app.auth.security import verify_request
 from app.config import REPO_ROOT, Settings, get_settings
 from app.events import EventBus
@@ -161,6 +172,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(chart.router)
+    app.include_router(visits.router)
     app.include_router(medicine_reference.router)
     app.include_router(prescriptions.router)
     app.include_router(runs.router)

@@ -30,6 +30,8 @@ from app.store.db import (
     Database,
     RunGrant,
     RunRow,
+    Visit,
+    VisitReference,
 )
 from app.store.object_storage import PrivateObjectStorage, StorageError
 
@@ -87,8 +89,13 @@ def seed(db: Database, settings: Settings) -> None:
             if user is None:
                 session.add(
                     AuthUser(
-                        id=user_id, email=email.lower(), full_name=name,
-                        password_hash=hashed, role=role, verified=True, created_at=now,
+                        id=user_id,
+                        email=email.lower(),
+                        full_name=name,
+                        password_hash=hashed,
+                        role=role,
+                        verified=True,
+                        created_at=now,
                     )
                 )
             else:
@@ -101,8 +108,12 @@ def seed(db: Database, settings: Settings) -> None:
         if connection is None:
             session.add(
                 ChartConnection(
-                    patient_id=PATIENT_ID, doctor_id=DOCTOR_ID, status="approved",
-                    requested_at=now, decided_at=now, consent_version="demo",
+                    patient_id=PATIENT_ID,
+                    doctor_id=DOCTOR_ID,
+                    status="approved",
+                    requested_at=now,
+                    decided_at=now,
+                    consent_version="demo",
                     request_id=uuid.uuid4().hex,
                 )
             )
@@ -116,8 +127,12 @@ def seed(db: Database, settings: Settings) -> None:
         if has_consent is None:
             session.add(
                 ConsentEvent(
-                    id=uuid.uuid4().hex, patient_id=PATIENT_ID, doctor_id=DOCTOR_ID,
-                    actor_id=PATIENT_ID, action="approved", version="demo",
+                    id=uuid.uuid4().hex,
+                    patient_id=PATIENT_ID,
+                    doctor_id=DOCTOR_ID,
+                    actor_id=PATIENT_ID,
+                    action="approved",
+                    version="demo",
                     scope="shared fictional demo accounts",
                     consent_text="Shared demo accounts hold fictional data only.",
                     occurred_at=now,
@@ -140,11 +155,17 @@ def seed(db: Database, settings: Settings) -> None:
         bundle = assemble(extraction, EncounterFields(), pseudonym, _loinc_map(extraction), {})
         db.add(
             RunRow(
-                id=run_id, status="reviewing", created_at=now - timedelta(minutes=index),
-                pseudonym=pseudonym, owner_id=PATIENT_ID, document_type=extraction.document_type,
+                id=run_id,
+                status="reviewing",
+                created_at=now - timedelta(minutes=index),
+                pseudonym=pseudonym,
+                owner_id=PATIENT_ID,
+                document_type=extraction.document_type,
                 extraction_json=extraction.model_dump_json(),
                 encounter_json=EncounterFields().model_dump_json(),
-                bundle_json=json.dumps(bundle), replay=True, title=case["title"],
+                bundle_json=json.dumps(bundle),
+                replay=True,
+                title=case["title"],
                 extractor_model="recorded sample reading",
                 submitted_by=DOCTOR_ID if index == 0 else PATIENT_ID,
             )
@@ -153,10 +174,16 @@ def seed(db: Database, settings: Settings) -> None:
             with db.session() as session:
                 session.add(
                     ClinicalSummary(
-                        id=f"demo-note-{run_id}", run_id=run_id, author_id=DOCTOR_ID,
-                        transcript=SAMPLE_NOTE_EN, summary_en=SAMPLE_NOTE_EN,
-                        summary_bn=SAMPLE_NOTE_BN, unresolved="[]", status="published",
-                        created_at=now, published_at=now,
+                        id=f"demo-note-{run_id}",
+                        run_id=run_id,
+                        author_id=DOCTOR_ID,
+                        transcript=SAMPLE_NOTE_EN,
+                        summary_en=SAMPLE_NOTE_EN,
+                        summary_bn=SAMPLE_NOTE_BN,
+                        unresolved="[]",
+                        status="published",
+                        created_at=now,
+                        published_at=now,
                     )
                 )
                 session.commit()
@@ -192,14 +219,28 @@ def reset(db: Database, settings: Settings, storage: PrivateObjectStorage | None
             session.exec(delete(RunGrant).where(RunGrant.run_id == run_id))
             session.exec(delete(ChartActivity).where(ChartActivity.run_id == run_id))
             session.exec(delete(ClinicalSummary).where(ClinicalSummary.run_id == run_id))
+            session.exec(delete(VisitReference).where(VisitReference.run_id == run_id))
             session.exec(delete(RunRow).where(RunRow.id == run_id))
             session.exec(delete(ChartDigest).where(ChartDigest.patient_id == PATIENT_ID))
             session.commit()
             removed.append(run_id)
     with db.session() as session:
-        session.exec(delete(CurrentMedicine).where(
-            CurrentMedicine.patient_id == PATIENT_ID, CurrentMedicine.confirmed_at < cutoff,
-        ))
+        empty_visits = session.exec(
+            select(Visit).where(
+                Visit.patient_id == PATIENT_ID,
+                Visit.created_at < cutoff,
+                ~Visit.id.in_(select(RunRow.visit_id).where(RunRow.visit_id.is_not(None))),
+            )
+        ).all()
+        for visit in empty_visits:
+            session.exec(delete(VisitReference).where(VisitReference.visit_id == visit.id))
+            session.delete(visit)
+        session.exec(
+            delete(CurrentMedicine).where(
+                CurrentMedicine.patient_id == PATIENT_ID,
+                CurrentMedicine.confirmed_at < cutoff,
+            )
+        )
         session.commit()
     for run_id in removed:
         folder = db.runs_dir / run_id
@@ -209,7 +250,9 @@ def reset(db: Database, settings: Settings, storage: PrivateObjectStorage | None
 
 
 async def reset_loop(
-    db: Database, settings: Settings, storage: PrivateObjectStorage | None = None,
+    db: Database,
+    settings: Settings,
+    storage: PrivateObjectStorage | None = None,
 ) -> None:
     while True:
         try:

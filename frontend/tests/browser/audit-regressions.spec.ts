@@ -10,7 +10,7 @@ async function doctor(page: Page, context: BrowserContext) {
 }
 async function draft(page: Page, context: BrowserContext) {
   await doctor(page,context);
-  await page.getByRole("button",{name:"Add report & note",exact:true}).click();
+  await page.getByRole("button",{name:"Start visit",exact:true}).click();
   await page.getByRole("button",{name:"New prescription",exact:true}).click();
   await page.getByRole("button",{name:"Write manually",exact:true}).click();
   await page.getByRole("button",{name:"Start manual prescription",exact:true}).click();
@@ -44,16 +44,16 @@ test("native browser Back cancellation keeps an unsaved prescription",async({pag
   await expect(input).toHaveValue("Unsaved fictional audit medicine");
 });
 
-test("doctor patient selection and chart section survive reload and browser history",async({page,context})=>{
+test("patient selection and visit routes survive reload and browser history",async({page,context})=>{
   await doctor(page,context);
-  await page.getByRole("button",{name:"Reports & history",exact:true}).click();
-  await expect(page).toHaveURL(/patient=ui-patient.*section=history/);
+  await expect(page).toHaveURL(/doctor\/patients\/ui-patient/);
+  await page.getByRole("button",{name:"Start visit",exact:true}).click();
+  await expect(page).toHaveURL(/doctor\/visits\/ui-visit$/);
   await page.reload();
-  await expect(page.getByRole("button",{name:"Reports & history",exact:true})).toHaveAttribute("aria-current","page");
-  await page.getByRole("button",{name:"Add report & note",exact:true}).click();
-  await expect(page).toHaveURL(/section=add/);
+  await expect(page.getByRole("heading",{name:"Follow-up consultation",exact:true})).toBeVisible();
+  await page.getByRole("button",{name:"New prescription",exact:true}).click();
   await page.goBack();
-  await expect(page.getByRole("button",{name:"Reports & history",exact:true})).toHaveAttribute("aria-current","page");
+  await expect(page).toHaveURL(/doctor\/visits\/ui-visit$/);
 });
 
 test("a slow prescription save locks inputs until the saved revision is loaded",async({page,context})=>{
@@ -124,7 +124,7 @@ test.describe("microphone privacy",()=>{
       };
     });
     await doctor(page,context);
-    await page.getByRole("button",{name:"Add report & note",exact:true}).click();
+    await page.getByRole("button",{name:"Start visit",exact:true}).click();
     await page.getByRole("button",{name:"New prescription",exact:true}).click();
     await page.getByRole("button",{name:"Start recording",exact:true}).click();
     await expect(page.getByRole("button",{name:"Stop recording",exact:true})).toBeVisible();

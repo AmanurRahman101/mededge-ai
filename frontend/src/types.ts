@@ -42,6 +42,8 @@ export interface Run {
   input_mode?: string;
   patient_name?: string;
   patient_id?: string;
+  visit_id?: string | null;
+  has_prescription_table?: boolean;
   status: string;
   pseudonym: string;
   document_type: string | null;
@@ -97,5 +99,5 @@ export interface ClinicalSummary {
 export interface PrescribedMedicine {
   id: string; name: string; strength: string; form: string;
   morning: string; noon: string; night: string; other_schedule: string;
-  instructions: string; duration: string; spoken_text: string; confirmed: boolean;
+  instructions: string; duration: string; image_text?: string; conflicts?: string[]; spoken_text: string; confirmed: boolean;
 }

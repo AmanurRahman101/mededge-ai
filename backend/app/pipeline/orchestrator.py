@@ -372,6 +372,15 @@ class Orchestrator:
                         summary_en=combined.value.summary_en,
                         summary_bn=combined.value.summary_bn,
                         unresolved=json.dumps(combined.value.unresolved),
+                        prescription_json=json.dumps(
+                            [
+                                m.model_copy(update={"confirmed": False}).model_dump()
+                                for m in combined.value.medicines
+                            ],
+                            ensure_ascii=False,
+                        )
+                        if combined.value.medicines
+                        else "",
                         created_at=datetime.now(UTC),
                     )
                 )

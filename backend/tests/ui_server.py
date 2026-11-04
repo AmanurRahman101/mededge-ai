@@ -14,7 +14,16 @@ from app.config import Settings
 from app.main import create_app
 from app.pipeline.chart_digest import DigestItem, DigestResult
 from app.pipeline.prescription_schema import PrescribedMedicine, PrescriptionDraft
-from app.store.db import AuthSession, AuthUser, ChartConnection, ClinicalSummary, Database, RunRow
+from app.pipeline.schemas import ConsultationDraft, Extraction, MedicationRow
+from app.store.db import (
+    AuthSession,
+    AuthUser,
+    ChartConnection,
+    ClinicalSummary,
+    Database,
+    RunRow,
+    Visit,
+)
 
 root = (Path(__file__).resolve().parents[1] / "var" / f"ui-{uuid.uuid4().hex}").resolve()
 root.mkdir(parents=True)
@@ -32,6 +41,7 @@ with db.session() as session:
     for uid, name, role in [
         ("ui-doctor", "Dr. Farah (fictional)", "doctor"),
         ("ui-patient", "Nadia (fictional)", "patient"),
+        ("ui-new-patient", "Rafi (fictional)", "patient"),
     ]:
         session.add(
             AuthUser(
@@ -63,6 +73,35 @@ with db.session() as session:
         )
     )
     session.add(
+        ChartConnection(
+            patient_id="ui-new-patient", doctor_id="ui-doctor", status="approved", requested_at=now
+        )
+    )
+    session.add(
+        Visit(
+            id="ui-visit",
+            patient_id="ui-patient",
+            doctor_id="ui-doctor",
+            title="Follow-up consultation",
+            status="open",
+            created_at=now,
+            submission_key="fixture-open",
+        )
+    )
+    session.add(
+        Visit(
+            id="ui-completed",
+            patient_id="ui-patient",
+            doctor_id="ui-doctor",
+            title="Earlier consultation",
+            status="completed",
+            created_at=now - timedelta(days=1),
+            completed_at=now,
+            submission_key="fixture-completed",
+        )
+    )
+    session.flush()
+    session.add(
         RunRow(
             id="ui-report",
             owner_id="ui-patient",
@@ -84,6 +123,7 @@ with db.session() as session:
     session.add(
         RunRow(
             id="ui-draft",
+            visit_id="ui-visit",
             owner_id="ui-patient",
             status="reviewing",
             created_at=now,
@@ -154,8 +194,10 @@ async def fixture_lifespan(app):
 
         async def fake_asr(*args, **kwargs):
             return {
-                "transcript": ("Fictional medicine five mg, half in the morning, "
-                               "zero at noon, one at night, continue.")
+                "transcript": (
+                    "Fictional medicine five mg, half in the morning, "
+                    "zero at noon, one at night, continue."
+                )
             }
 
         from app.api import prescriptions
@@ -186,6 +228,37 @@ async def fixture_lifespan(app):
         app.state.medicine_reference.search = fake_search
 
         async def fake_provider(*args, **kwargs):
+            if kwargs["schema"] == ConsultationDraft:
+                return SimpleNamespace(
+                    value=ConsultationDraft(
+                        extraction=Extraction(
+                            document_type="prescription",
+                            medications=[
+                                MedicationRow(
+                                    raw_text="Fictional medicine 5 mg",
+                                    drug_name="Fictional medicine",
+                                )
+                            ],
+                        ),
+                        medicines=[
+                            PrescribedMedicine(
+                                name="Fictional medicine",
+                                strength="5 mg",
+                                morning="1",
+                                noon="0",
+                                night="1",
+                                duration="7 days",
+                                image_text="Fictional image medicine",
+                                spoken_text="Fictional doctor voice",
+                                conflicts=["Check image and spoken name"],
+                            )
+                        ],
+                        summary_en="Fictional reviewed assessment.",
+                        summary_bn="কাল্পনিক মূল্যায়ন।",
+                        unresolved=["Check medicine name"],
+                    ),
+                    target="fixture:combined",
+                )
             if kwargs["schema"] == PrescriptionDraft:
                 return SimpleNamespace(
                     value=PrescriptionDraft(
@@ -203,6 +276,8 @@ async def fixture_lifespan(app):
                         summary_bn="কাল্পনিক মূল্যায়ন।",
                     )
                 )
+            if kwargs["schema"] is not DigestResult:
+                raise RuntimeError("Administrative fixture uses deterministic fallback")
             notes = json.loads(kwargs["parts"][0].text)
             return SimpleNamespace(
                 value=DigestResult(
@@ -221,7 +296,31 @@ async def fixture_lifespan(app):
             )
 
         app.state.router.structured = fake_provider
-        yield
+        from app.pipeline import orchestrator as module
+
+        old_segment, old_ocr, old_voice = (
+            module.segment_page,
+            module.read_text_boxes,
+            module.transcribe_wav,
+        )
+
+        async def fake_segment(*args, **kwargs):
+            return {}
+
+        async def fake_voice(*args, **kwargs):
+            return {"transcript": "Fictional medicine 5 mg, one morning and night for seven days."}
+
+        module.segment_page = fake_segment
+        module.read_text_boxes = lambda image: []
+        module.transcribe_wav = fake_voice
+        try:
+            yield
+        finally:
+            module.segment_page, module.read_text_boxes, module.transcribe_wav = (
+                old_segment,
+                old_ocr,
+                old_voice,
+            )
 
 
 app.router.lifespan_context = fixture_lifespan

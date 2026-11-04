@@ -14,10 +14,10 @@ async function bounds(page: Page) {
 
 test("patient language covers medicines, consent, upload and persists without clinical translation", async ({ page, context }) => {
   await session(context, "patient");
-  await page.goto("/patient?tab=summary");
+  await page.goto("/patient/health");
   await page.getByRole("button", { name: "বাংলা", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "bn");
-  await expect(page.getByRole("heading", { name: "আপনার স্বাস্থ্যের সারাংশ" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "স্বাস্থ্যের সারাংশ" })).toBeVisible();
   await page.getByRole("button", { name: "ওষুধ যোগ করুন", exact: true }).click();
   const name = page.getByLabel("ওষুধের নাম ও শক্তি");
   await name.fill("Fictional medicine 5 mg");
@@ -31,11 +31,11 @@ test("patient language covers medicines, consent, upload and persists without cl
     await route.fulfill({ json: data });
   });
   await page.reload();
-  await page.getByRole("button", { name: /^আমার ডাক্তার/ }).click();
+  await page.getByRole("button", { name: "ডাক্তার", exact: true }).click();
   await expect(page.locator(".consent-details")).toContainText("ডাউনলোড করা তথ্য ফেরত নেওয়া যায় না");
   await expect(page.locator(".consent-details")).toContainText("Meta");
   await expect(page.getByRole("button", { name: "এই ডাক্তারকে অনুমতি দিন" })).toBeDisabled();
-  await page.getByRole("button", { name: "রিপোর্ট যোগ করুন", exact: true }).click();
+  await page.goto("/patient/upload");
   await expect(page.getByText("ছবি বেছে নিন", { exact: true })).toBeVisible();
   await expect(page.getByLabel("রিপোর্টের ছবি")).toHaveAttribute("type", "file");
   await expect(page.locator(".upload-module")).toContainText("ব্যক্তিগত তথ্য");
@@ -48,7 +48,7 @@ test("patient language covers medicines, consent, upload and persists without cl
 });
 
 test("filtered empty reports recover through visible clear action; open menus stay in bounds", async ({ page, context }) => {
-  await session(context, "patient"); await page.goto("/patient");
+  await session(context, "patient"); await page.goto("/patient/files");
   await page.getByLabel("Find a report", { exact: true }).fill("No such fictional report");
   await expect(page.getByText("No records found", { exact: true })).toBeVisible();
   await expect(page.locator(".active-filters")).toContainText("No such fictional report");
@@ -60,7 +60,7 @@ test("filtered empty reports recover through visible clear action; open menus st
     await menu.locator("summary").click(); await bounds(page);
     await page.keyboard.press("Escape"); await expect(menu).not.toHaveAttribute("open", "");
     await expect(menu.locator("summary")).toBeFocused();
-    await menu.locator("summary").click(); await page.getByRole("heading", { name: "My health", exact: true }).click();
+    await menu.locator("summary").click(); await page.getByRole("heading", { name: "Reports", exact: true }).click();
     await expect(menu).not.toHaveAttribute("open", "");
   }
   await page.setViewportSize({ width: 1280, height: 1000 });
@@ -79,8 +79,7 @@ test("SPA navigation announces its destination and returns keyboard focus", asyn
 });
 
 test("prescription review has actionable checks, saved state, and explicit row collapse", async ({ page, context }) => {
-  await session(context, "doctor"); await page.goto("/doctor?patient=ui-patient&section=add");
-  await page.getByRole("button", { name: "New prescription", exact: true }).click();
+  await session(context, "doctor"); await page.goto("/doctor/visits/ui-visit/prescription");
   await page.getByRole("button", { name: "Write manually", exact: true }).click();
   await page.getByRole("button", { name: "Start manual prescription", exact: true }).click();
   await page.getByRole("button", { name: "Add medicine manually", exact: true }).click();
@@ -106,7 +105,7 @@ test("prescription review has actionable checks, saved state, and explicit row c
   await page.screenshot({ path: "../scripts/out/ui/usability-prescription.png", fullPage: true });
   const axe = await new AxeBuilder({ page }).analyze(); expect(axe.violations).toEqual([]);
   await page.getByRole("button", { name: "Back to patient chart", exact: true }).click();
-  await expect(page).toHaveURL(/patient=ui-patient.*section=history/);
+  await expect(page).toHaveURL(/doctor\/visits\/ui-visit$/);
 });
 
 test("saved prescription loading and failure never masquerade as an empty prescription", async ({ page, context }) => {

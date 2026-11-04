@@ -48,6 +48,8 @@ export function post<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
 }
 
+export const remove = (path: string) => request(path, { method: "DELETE" });
+export const get = <T,>(path: string) => request<T>(path);
 export const getChart = <T,>(path: string) => request<T>(`/api/chart${path}`);
 export const updateChart = <T,>(path: string, body: unknown) => request<T>(`/api/chart${path}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 export const deleteChart = <T,>(path: string) => request<T>(`/api/chart${path}`, { method: "DELETE" });

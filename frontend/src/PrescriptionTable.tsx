@@ -46,6 +46,8 @@ export function PrescriptionEditor({ medicines, onChange }: { medicines: Prescri
         <label className="medicine-instructions">Other schedule<input value={m.other_schedule} maxLength={500} placeholder="As needed, weekly, tapering, topical…" onChange={e => update(m.id, { other_schedule: e.target.value })} /></label>
       </div>
       <details><summary>Check the spoken text or Bangladesh reference</summary>
+        {m.image_text && <p className="spoken-evidence"><strong>Image:</strong> {m.image_text}</p>}
+        {!!m.conflicts?.length && <ul className="care-conflicts">{m.conflicts.map((conflict, i) => <li key={i}>{conflict}</li>)}</ul>}
         {m.spoken_text && <p className="spoken-evidence">{m.spoken_text}</p>}
         <MedicineLookup onChoose={product => update(m.id, { name: product.brand, form: product.form })} />
         <p className="module-help">Choosing a product changes its name and form only. Check the listed composition against the strength you prescribed.</p>

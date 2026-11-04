@@ -1,5 +1,6 @@
 import asyncio
 import io
+import json
 import wave
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ from sqlmodel import select
 
 from app.models.providers import ImagePart, TextPart
 from app.pipeline.orchestrator import RunContext
+from app.pipeline.prescription_schema import PrescribedMedicine
 from app.pipeline.schemas import ConsultationDraft, Extraction
 from app.store.db import ChartConnection, ClinicalSummary, RunRow
 from tests.test_access import access_client, sign_in  # noqa: F401
@@ -164,6 +166,20 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
         return SimpleNamespace(
             value=ConsultationDraft(
                 extraction=Extraction(document_type="prescription"),
+                medicines=[
+                    PrescribedMedicine(
+                        name="Fictional Bangladesh reference candidate",
+                        strength="10 mg",
+                        morning="½",
+                        noon="0",
+                        night="1",
+                        duration="চলবে",
+                        image_text="unclear image name",
+                        spoken_text="doctor medicine wording",
+                        conflicts=["Name needs doctor confirmation"],
+                        confirmed=True,
+                    )
+                ],
                 summary_en="Outpatient visit, fasting specimen, route to nephrology.",
                 summary_bn="বহির্বিভাগ ভিজিট, উপবাসে নমুনা, নেফ্রোলজিতে পাঠান।",
                 unresolved=[],
@@ -194,6 +210,11 @@ async def test_combined_pipeline_uses_image_and_transcript_and_respects_revocati
             )
             assert len(drafts) == 1 and drafts[0].status == "draft"
             assert drafts[0].summary_bn and drafts[0].summary_en
+            table = json.loads(drafts[0].prescription_json)
+            assert table[0]["confirmed"] is False
+            assert table[0]["morning"] == "½" and table[0]["noon"] == "0"
+            assert table[0]["image_text"] and table[0]["spoken_text"]
+            assert table[0]["conflicts"] and table[0]["duration"] == "চলবে"
             assert db.get("combo").status == "reviewing"
             messages = [event.message for event in bus.history("combo")]
             assert "Transcribing the doctor's recording" in messages
