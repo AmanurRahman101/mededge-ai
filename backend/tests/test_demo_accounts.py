@@ -1,3 +1,4 @@
+import asyncio
 import io
 from datetime import UTC, datetime, timedelta
 
@@ -25,7 +26,13 @@ PASSWORD = "demo-password-for-tests"
 
 
 @pytest.fixture
-def demo_client(tmp_path):
+def demo_client(tmp_path, monkeypatch):
+    # These tests invoke reset explicitly with controlled age/storage failures.
+    # Keep the production timer from racing those assertions after startup.
+    async def idle_maintenance(*args):
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(demo, "reset_loop", idle_maintenance)
     settings = Settings(
         _env_file=None,
         app_env="test",
